@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>CBE SMART Objective Generator | AI-Powered Performance Goals</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #f8f5eb 0%, #ece4d4 100%);
+            --brand-gold: #D4AF37;
+            --brand-gold-dark: #B8860B;
+            --brand-gold-light: #F5D742;
+            --brand-gradient: linear-gradient(135deg, #D4AF37 0%, #F0B27A 100%);
+            --brand-hover: linear-gradient(135deg, #B8860B 0%, #E6A017 100%);
+            --brand-dark: #0A2F44;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #4b5563;
+            --border-color: #e9e2d0;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --radius-lg: 1rem;
+            --radius-xl: 1.5rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 3rem 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            border: 1px solid rgba(212, 175, 55, 0.3);
+        }
+
+        /* Fancy header redesign */
+        .card-header {
+            position: relative;
+            background: linear-gradient(135deg, #0A2F44 0%, #124e6b 100%);
+            padding: 1.5rem 1rem 1rem;
+            text-align: center;
+            overflow: hidden;
+            border-bottom: 3px solid var(--brand-gold);
+        }
+
+        /* Diagonal pattern overlay for depth */
+        .card-header::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: repeating-linear-gradient(45deg, rgba(212, 175, 55, 0.05) 0px, rgba(212, 175, 55, 0.05) 2px, transparent 2px, transparent 8px);
+            pointer-events: none;
+        }
+
+        /* Decorative gold ribbon at the top */
+        .card-header::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--brand-gold), var(--brand-gold-light), var(--brand-gold));
+            animation: shimmer 2s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .cbe-branding {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 0.2rem;
+        }
+     img {
+            max-width: 60%;
+            max-height: 60%;
+        } 
+
+        .company-name h2 {
+            font-size: 1.7rem;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .title-wrapper {
+            position: relative;
+            z-index: 2;
+            margin-top: 0;
+        }
+        
+
+        .card-header h1 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            color: white;
+            background: rgba(0,0,0,0.2);
+            backdrop-filter: blur(4px);
+            border-radius: 60px;
+            letter-spacing: -0.02em;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid rgba(212,175,55,0.5);
+        }
+
+        .card-header h1 i {
+            color: var(--brand-gold);
+            font-size: 2rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        }
+
+        /* Subtle gold glow animation on hover */
+        .card-header h1:hover {
+            border-color: var(--brand-gold);
+            background: rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+
+        .card-body {
+            padding: 2.5rem;
+            background: #fefcf8;
+        }
+
+        /* Upload zones */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 2rem 1.5rem;
+            text-align: center;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 180px;
+        }
+
+        .upload-zone:hover, .drag-over {
+            border-color: var(--brand-gold);
+            background: #fffaf0;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .upload-zone i {
+            font-size: 2.5rem;
+            color: #b9aa7a;
+            margin-bottom: 1rem;
+            transition: color 0.2s;
+        }
+        
+        .upload-zone:hover i {
+            color: var(--brand-gold);
+        }
+
+        .upload-zone p {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .upload-zone .file-info {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            word-break: break-all;
+            background: #f3efe6;
+            padding: 0.25rem 0.75rem;
+            border-radius: 2rem;
+        }
+
+        .upload-zone input {
+            display: none;
+        }
+
+        .control-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            background: #ffffff;
+            padding: 1.5rem;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .control-block {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .control-label {
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .control-label i {
+            color: var(--brand-gold);
+        }
+
+        .count-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .count-control input {
+            flex: 1;
+            text-align: center;
+            font-size: 1.1rem;
+            padding: 0.65rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            background: #fefaf2;
+        }
+
+        .count-control button {
+            background: #f3efe6;
+            border: 1px solid var(--border-color);
+            width: 42px;
+            height: 42px;
+            border-radius: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--brand-dark);
+        }
+
+        .count-control button:hover {
+            background: #e9dfcc;
+            border-color: var(--brand-gold);
+            color: var(--brand-gold-dark);
+        }
+
+        .quarter-select {
+            padding: 0.65rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            font-weight: 600;
+            background: #fefaf2;
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            height: 42px;
+        }
+        
+        .quarter-select:focus {
+            outline: 2px solid var(--brand-gold);
+            border-color: transparent;
+        }
+
+        .generate-btn {
+            width: 100%;
+            background: var(--brand-gradient);
+            border: none;
+            padding: 1.1rem;
+            border-radius: 0.75rem;
+            color: #1e2a2f;
+            font-weight: 800;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(212, 175, 55, 0.35);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+        }
+
+        .generate-btn:hover {
+            background: var(--brand-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(184, 134, 11, 0.4);
+            color: #0a2f44;
+        }
+
+        .generate-btn:active {
+            transform: translateY(1px);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 47, 68, 0.75);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            visibility: hidden;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .spinner {
+            background: white;
+            padding: 3rem;
+            border-radius: var(--radius-xl);
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            width: 320px;
+            border-top: 4px solid var(--brand-gold);
+        }
+
+        .spinner i {
+            font-size: 3.5rem;
+            color: var(--brand-gold);
+            animation: spin 1.2s linear infinite;
+        }
+
+        .spinner p {
+            margin-top: 1.25rem;
+            font-weight: 600;
+            color: var(--brand-dark);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-card {
+            margin-top: 2rem;
+            background: #ffffff;
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            border-left: 5px solid var(--brand-gold);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .results-header h3 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--brand-dark);
+        }
+
+        .copy-btn {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .copy-btn:hover {
+            background: #fefaf2;
+            border-color: var(--brand-gold);
+            color: var(--brand-gold-dark);
+        }
+
+        .objectives-list {
+            list-style: none;
+        }
+
+        .objective-item {
+            background: #fefcf8;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .objective-item:hover {
+            border-color: #d4af3770;
+            transform: translateX(2px);
+            background: #fffcf5;
+        }
+
+        .objective-item strong {
+            color: var(--brand-gold-dark);
+            margin-right: 0.25rem;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 1.25rem;
+            border-radius: var(--radius-lg);
+            margin-top: 2rem;
+            border: 1px solid #fee2e2;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 600;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: #6b5a3a;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        footer i {
+            margin-right: 0.25rem;
+            color: var(--brand-gold);
+        }
+
+        .footer-sep {
+            width: 4px;
+            height: 4px;
+            background: #d4af37;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+            .upload-grid {
+                grid-template-columns: 1fr;
+            }
+            .control-section {
+                grid-template-columns: 1fr;
+            }
+            .card-body {
+                padding: 1.5rem;
+            }
+            .card-header h1 {
+                font-size: 1.4rem;
+                padding: 0.4rem 1rem;
+                flex-wrap: wrap;
+            }
+            .card-header h1 i {
+                font-size: 1.5rem;
+            }
+            .company-name h2 {
+                font-size: 1.3rem;
+            }
+            .cbe-branding {
+                display: flex;
+                text-align: center;
+                gap: 0.75rem;
+            }
+            .logo-container {
+                width: 60px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <div class="card-header">
+            <div class="cbe-branding">
+                <div class="logo-container">
+                    <img src="{{ url_for('static', filename='download_bgs.png') }}" alt="Commercial Bank of Ethiopia Logo" >
+                </div>
+                <div class="company-name">
+                    <h2>COMMERCIAL BANK OF ETHIOPIA</h2>
+                </div>
+            </div>
+            <div class="title-wrapper">
+                <h1><i class="fas fa-chart-line"></i> AI POWERED SMART Objective Generator</h1>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="upload-grid">
+                <div class="upload-zone" id="bscZone">
+                    <i class="fas fa-file-excel"></i>
+                    <p>Balanced Scorecard (BSC)</p>
+                    <span style="font-size: 0.8rem; color: #a58e5a;">Format: .xlsx, .xls</span>
+                    <div class="file-info" id="bscInfo">No file selected</div>
+                    <input type="file" id="bscFile" accept=".xlsx, .xls">
+                </div>
+                <div class="upload-zone" id="jdZone">
+                    <i class="fas fa-file-word"></i>
+                    <p>Job Description</p>
+                    <span style="font-size: 0.8rem; color: #a58e5a;">Format: .docx</span>
+                    <div class="file-info" id="jdInfo">No file selected</div>
+                    <input type="file" id="jdFile" accept=".docx">
+                </div>
+            </div>
+
+            <div class="control-section">
+                <div class="control-block">
+                    <div class="control-label">
+                        <i class="fas fa-bullseye"></i> Number of SMART objectives
+                    </div>
+                    <div class="count-control">
+                        <button id="decCount" aria-label="Decrease">−</button>
+                        <input type="number" id="objCount" min="1" max="15" value="5" readonly>
+                        <button id="incCount" aria-label="Increase">+</button>
+                    </div>
+                </div>
+                
+                <div class="control-block">
+                    <div class="control-label">
+                        <i class="fas fa-calendar-alt"></i> Select Quarter
+                    </div>
+                    <select id="quarterSelect" class="quarter-select">
+                        <option value="Q1">Q1</option>
+                        <option value="Q2">Q2</option>
+                        <option value="Q3">Q3</option>
+                        <option value="Q4">Q4</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="generate-btn" id="generateBtn">
+                <i class="fas fa-magic"></i> Generate CBE SMART Objectives
+            </button>
+
+            <div id="resultArea" style="display: none;"></div>
+        </div>
+    </div>
+    <footer>
+        <i class="fas fa-landmark"></i> Commercial Bank of Ethiopia • AI Excellence
+        <span class="footer-sep"></span>
+        <i class="fas fa-robot"></i> Powered by local AI (Ollama)
+        <span class="footer-sep"></span>
+        <i class="fas fa-chart-simple"></i> Aligned with Golden Spiral values
+    </footer>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner">
+        <i class="fas fa-cog"></i>
+        <p>Generating objectives for CBE ...</p>
+    </div>
+</div>
+
+<script>
+    // DOM elements (unchanged functionality)
+    const bscZone = document.getElementById('bscZone');
+    const jdZone = document.getElementById('jdZone');
+    const bscInput = document.getElementById('bscFile');
+    const jdInput = document.getElementById('jdFile');
+    const bscInfo = document.getElementById('bscInfo');
+    const jdInfo = document.getElementById('jdInfo');
+    const objCountInput = document.getElementById('objCount');
+    const decBtn = document.getElementById('decCount');
+    const incBtn = document.getElementById('incCount');
+    const generateBtn = document.getElementById('generateBtn');
+    const resultArea = document.getElementById('resultArea');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    let bscFile = null;
+    let jdFile = null;
+
+    function updateFileDisplay(input, infoDiv, file) {
+        if (file) {
+            infoDiv.innerHTML = `<i class="fas fa-check-circle" style="color: #D4AF37;"></i> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            infoDiv.style.backgroundColor = '#fef6e6';
+            infoDiv.style.color = '#a4711a';
+        } else {
+            infoDiv.innerHTML = 'No file selected';
+            infoDiv.style.backgroundColor = '#f3efe6';
+            infoDiv.style.color = '#7f6b48';
+        }
+    }
+
+    bscInput.addEventListener('change', (e) => {
+        bscFile = e.target.files[0];
+        updateFileDisplay(bscInput, bscInfo, bscFile);
+    });
+    jdInput.addEventListener('change', (e) => {
+        jdFile = e.target.files[0];
+        updateFileDisplay(jdInput, jdInfo, jdFile);
+    });
+
+    function setupDragDrop(zone, input, fileVarName) {
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', () => {
+            zone.classList.remove('drag-over');
+        });
+        zone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                const valid = fileVarName === 'bsc' ? 
+                    (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) : 
+                    file.name.endsWith('.docx');
+                if (valid) {
+                    if (fileVarName === 'bsc') {
+                        bscFile = file;
+                        bscInput.files = e.dataTransfer.files; 
+                        updateFileDisplay(bscInput, bscInfo, bscFile);
+                    } else {
+                        jdFile = file;
+                        jdInput.files = e.dataTransfer.files;
+                        updateFileDisplay(jdInput, jdInfo, jdFile);
+                    }
+                } else {
+                    alert(`Please upload a ${fileVarName === 'bsc' ? 'Excel (.xlsx/.xls)' : 'Word (.docx)'} file.`);
+                }
+            }
+        });
+        zone.addEventListener('click', () => {
+            if (fileVarName === 'bsc') bscInput.click();
+            else jdInput.click();
+        });
+    }
+    setupDragDrop(bscZone, bscInput, 'bsc');
+    setupDragDrop(jdZone, jdInput, 'jd');
+
+    decBtn.addEventListener('click', () => {
+        let val = parseInt(objCountInput.value);
+        if (val > 1) objCountInput.value = val - 1;
+    });
+    incBtn.addEventListener('click', () => {
+        let val = parseInt(objCountInput.value);
+        if (val < 15) objCountInput.value = val + 1;
+    });
+
+    function formatObjectives(text) {
+        const lines = text.split('\n');
+        let html = '<ul class="objectives-list">';
+        let inList = false;
+        for (let line of lines) {
+            line = line.trim();
+            if (line.match(/^\d+\.\s/)) {
+                html += `<li class="objective-item"><strong>${line.split('.')[0]}.</strong> ${line.substring(line.indexOf('.')+1).trim()}</li>`;
+                inList = true;
+            } else if (line.startsWith('-') || line.startsWith('*')) {
+                html += `<li class="objective-item">${line.substring(1).trim()}</li>`;
+                inList = true;
+            } else if (line.length > 0 && !inList) {
+                html += `<div style="margin-bottom: 0.75rem; font-weight: 600; color: #0A2F44;">${line}</div>`;
+            } else if (line.length > 0 && inList) {
+                html += `<li class="objective-item" style="list-style: none; padding-left: 1.5rem;">${line}</li>`;
+            }
+        }
+        html += '</ul>';
+        if (!html.includes('objective-item')) {
+            html = `<pre style="white-space: pre-wrap; font-family: inherit; color: #334155;">${text}</pre>`;
+        }
+        return html;
+    }
+
+    async function copyObjectives(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            const toast = document.createElement('div');
+            toast.innerText = '✓ SMART objectives copied to clipboard!';
+            toast.style.position = 'fixed';
+            toast.style.bottom = '30px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.backgroundColor = '#0A2F44';
+            toast.style.color = '#F5D742';
+            toast.style.padding = '0.75rem 1.5rem';
+            toast.style.borderRadius = '0.5rem';
+            toast.style.zIndex = '2000';
+            toast.style.fontSize = '0.9rem';
+            toast.style.fontWeight = '600';
+            toast.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.2)';
+            toast.style.borderLeft = '4px solid #D4AF37';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } catch (err) {
+            alert('Could not copy. You can manually select the text.');
+        }
+    }
+
+    generateBtn.addEventListener('click', async () => {
+        if (!bscFile || !jdFile) {
+            alert('Please select both Balanced Scorecard (Excel) and Job Description (Word) files.');
+            return;
+        }
+
+        resultArea.style.display = 'none';
+        resultArea.innerHTML = '';
+        loadingOverlay.classList.add('active');
+
+        const formData = new FormData();
+        formData.append('bsc', bscFile);
+        formData.append('jd', jdFile);
+        formData.append('num_objectives', objCountInput.value);
+
+        try {
+            const response = await fetch('/api/generate', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Server error');
+            }
+
+            const formatted = formatObjectives(data.objectives);
+            resultArea.innerHTML = `
+                <div class="results-card">
+                    <div class="results-header">
+                        <h3><i class="fas fa-trophy" style="color:#D4AF37"></i> Generated SMART Objectives (${data.num})</h3>
+                        <button class="copy-btn" id="copyBtn"><i class="fas fa-copy"></i> Copy all</button>
+                    </div>
+                    <div id="objectivesContent">${formatted}</div>
+                </div>
+            `;
+            resultArea.style.display = 'block';
+
+            document.getElementById('copyBtn').addEventListener('click', () => {
+                copyObjectives(data.objectives);
+            });
+        } catch (err) {
+            resultArea.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i> ${err.message}
+                </div>
+            `;
+            resultArea.style.display = 'block';
+        } finally {
+            loadingOverlay.classList.remove('active');
+        }
+    });
+</script>
+</body>
+</html>
