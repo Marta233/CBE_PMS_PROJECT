@@ -58,7 +58,7 @@ class JDLoader:
                 if not job_title:
                     job_title = extract_field("job title")
                 # Extract responsibilities
-                responsibilities = self._extract_responsibilities(table_text)
+                responsibilities = self._extract_responsibilities(table)
                 record = {
                     "job_title": job_title,
                     "division": extract_field("division"),
