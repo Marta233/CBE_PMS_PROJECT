@@ -1,3 +1,9 @@
 flask
+pandas
+python-docx
+langchain-community
 ollama
 python-dotenv
+openpyxl
+faiss-cpu 
+sentence-transformers
