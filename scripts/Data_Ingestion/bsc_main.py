@@ -1,14 +1,10 @@
 from pathlib import Path
 import sys
 import json
-
 # Add current directory to path
 sys.path.insert(0, str(Path.cwd()))
-
 from config import (
-    DATA_PATH, JD_FILE_PATH, OUTPUT_PATH, 
-    RBB_SHEET, DIGITAL_SHEET, 
-    COL_CONFIG, START_ROW, WEIGHT_THRESHOLD
+    DATA_PATH, OUTPUT_PATH,START_ROW, RBB_SHEET, DIGITAL_SHEET, COL_CONFIG
 )
 from bsc_loader import BSCLoader
 print("🚀 Starting BSC processing...")

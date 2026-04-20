@@ -33,10 +33,7 @@ OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 from pathlib import Path
 
 # File paths
-JD_FILE_PATH = Path("./Data/raw/JD2.docx")
-
-
-
+JD_FILE_PATH = Path("./Data/raw/RBB_JD.docx")
 # Fields to extract (matching your BSC structure)
 JD_FIELDS = [
     "job_title",

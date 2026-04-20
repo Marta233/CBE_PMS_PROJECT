@@ -4,7 +4,7 @@
 import pandas as pd
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List 
 from docx import Document
 import sys
 
@@ -12,8 +12,6 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import JD_FILE_PATH, OUTPUT_PATH, JD_FIELDS
-
-
 class JDLoader:
     """Load and process Job Description data - Similar to BSCLoader"""
     
