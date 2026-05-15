@@ -7,3 +7,7 @@ python-dotenv
 openpyxl
 faiss-cpu 
 sentence-transformers
+langchain
+langchain-huggingface
+sentence-transformers
+faiss-cpu

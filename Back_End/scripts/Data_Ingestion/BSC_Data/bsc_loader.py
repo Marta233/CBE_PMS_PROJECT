@@ -180,7 +180,7 @@ class BSCLoader:
             
             if current_strategic_obj:
                 data_rows.append({
-                    'division': 'Digital',
+                    'division': 'Digital Banking',
                     'strategic_objective': current_strategic_obj,
                     'kpi': str(kpi).strip(),
                     'measurement': measurement,
