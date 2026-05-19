@@ -25,7 +25,7 @@ los_df, los_docs = run_los_pipeline()
 print('LOS Data successfully processed. Shape:', los_df.shape)
 
 
-VECTORSTORE_PATH = Path("./vectorstore")
+VECTORSTORE_PATH = Path("Back_End/Data/vectorstore")
 
 VECTORSTORE_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -45,7 +45,7 @@ JD_DOCUMENTS = jd_docs
 # =========================================================
 
 FAISS_INDEX_PATH = (
-    VECTORSTORE_PATH / "pms_faiss_index"
+    VECTORSTORE_PATH / "bsc_faiss_index"
 )
 
 # =========================================================

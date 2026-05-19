@@ -25,14 +25,14 @@ print("🚀 Starting pipeline...")
 # BUILD BSC-ONLY FAISS VECTORSTORE
 # =========================================================
 
-BSC_FAISS_PATH = Path(FAISS_INDEX_PATH).parent / "bsc_faiss_index"
+
 
 bsc_vectorstore = PMSVectorStore(
     embedding_model=EMBEDDING_MODEL,
-    index_path=BSC_FAISS_PATH,
+    index_path=FAISS_INDEX_PATH,
 )
 
-if BSC_FAISS_PATH.exists():
+if FAISS_INDEX_PATH.exists():
     print("\n📂 Loading existing BSC FAISS index...")
     bsc_vectorstore.load_vectorstore()
 else:
@@ -66,7 +66,7 @@ extractor = QueryExtractor(
 
 query = """
 Division: Digital Banking
-Job Title: Senior Digital Banking Officer
+Job Title: Junior Officer
 Department:Card Banking
 Unit: ATM Operations
 Job Grade: 13
@@ -110,3 +110,23 @@ print("\n✅ Contexts ready:")
 print(f"   JD  context : {len(jd_context)} characters")
 print(f"   BSC context : {len(bsc_context)} characters  ({len(result.bsc_docs)} docs)")
 print(f"   LOS context : {len(los_context)} characters  ({len(result.los_docs)} docs)")
+
+
+import json
+from pathlib import Path
+
+# After your existing context extraction at the bottom of process_embeddings.py
+retrieved_context = {
+    "query": query,
+    "jd_context": jd_context,
+    "bsc_context": bsc_context,
+    "los_context": los_context,
+}
+
+save_path = Path(__file__).resolve().parent.parent.parent / "Data" / "processed" / "retrieved_context.json"
+save_path.parent.mkdir(parents=True, exist_ok=True)
+
+with open(save_path, "w", encoding="utf-8") as f:
+    json.dump(retrieved_context, f, ensure_ascii=False, indent=2)
+
+print(f"\n✅ Context saved to: {save_path}")

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBE PMS Objective Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background:#f7f7f7; }
+    .card { background:white; padding: 24px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    input, button { width: 100%; padding: 10px; margin: 8px 0; }
+    button { background:#0b57d0; color:white; border:none; cursor:pointer; }
+    pre { background:#eee; padding: 12px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>PMS Objective Generator</h2>
+
+    <input id="division" placeholder="Division" value="Digital Banking" />
+    <input id="department" placeholder="Department" value="Card Banking" />
+    <input id="unit" placeholder="Unit" value="ATM Operations" />
+    <input id="job_title" placeholder="Job Title" value="Junior Officer" />
+    <input id="job_grade" placeholder="Job Grade" value="13" />
+    <input id="num_objectives" type="number" value="5" />
+
+    <button onclick="generateObjectives()">Generate Objectives</button>
+
+    <h3>Response</h3>
+    <pre id="result">No data yet...</pre>
+  </div>
+
+  <script>
+    async function generateObjectives() {
+      const payload = {
+        division: document.getElementById('division').value,
+        department: document.getElementById('department').value,
+        unit: document.getElementById('unit').value,
+        job_title: document.getElementById('job_title').value,
+        job_grade: document.getElementById('job_grade').value,
+        num_objectives: parseInt(document.getElementById('num_objectives').value)
+      };
+
+      document.getElementById('result').textContent = 'Loading...';
+
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+      } catch (error) {
+        document.getElementById('result').textContent = 'Error: ' + error.message;
+      }
+    }
+  </script>
+</body>
+</html>

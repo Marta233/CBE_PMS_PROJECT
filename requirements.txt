@@ -1,4 +1,4 @@
-flask
+fastapi
 pandas
 python-docx
 langchain-community
@@ -11,3 +11,4 @@ langchain
 langchain-huggingface
 sentence-transformers
 faiss-cpu
+uvicorn 

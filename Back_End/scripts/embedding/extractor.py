@@ -32,6 +32,7 @@ LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
     "Card": [
         "card",
         "Card Banking",
+        "Director Card Banking",
            # ATM unit lives under Card department in LOS
     ],
     "Digital_service_devlopment": [
