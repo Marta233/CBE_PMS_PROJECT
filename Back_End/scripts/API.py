@@ -5,7 +5,7 @@ API.py  —  CBE PMS Objective Generation API
   GET  /api/health    →  server status
 
 Start:
-  uvicorn API:app --host 0.0.0.0 --port 8000 --reload
+  uvicorn Back_End.API:app --host 0.0.0.0 --port 8000 --reload
 
 Swagger UI:  http://localhost:8000/docs
 """
@@ -19,7 +19,7 @@ import sys
 import warnings
 from pathlib import Path
 
-# ── silence noisy third-party loggers before anything else ───────────────────
+# ── silence noisy third-party loggers ────────────────────────────────────────
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
 logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
@@ -30,12 +30,7 @@ warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_VERBOSITY"]       = "error"
 
-# ── clean app logger ──────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(message)s",
-    datefmt="%H:%M:%S",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("pms")
 
 import ollama
@@ -50,13 +45,139 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from config import FAISS_INDEX_PATH, EMBEDDING_MODEL, LOS_DATA_PATH, JD_DATA_PATH, BSC_Data_PATH
 from embedding.embedder  import PMSVectorStore
-from embedding.extractor import QueryExtractor, _get_text
+from embedding.extractor import QueryExtractor, _get_text, _get_meta
 from llm.prompt_builder  import build_prompt, load_critical_target
 
 BSC_FAISS_PATH = Path(FAISS_INDEX_PATH)
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# TERMINAL DISPLAY HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+W = 90   # terminal width
+
+def _bar(char="═"):  print(char * W)
+def _thin(): print("─" * W)
+def _blank(): print()
+
+def _section(title: str):
+    _blank()
+    _bar("═")
+    print(f"  {title}")
+    _bar("═")
+
+def _subsection(title: str):
+    _blank()
+    print(f"  ── {title} {'─' * (W - len(title) - 6)}")
+
+def _kv(label: str, value: str, indent: int = 4):
+    pad = " " * indent
+    label_col = f"{label}:".ljust(24)
+    print(f"{pad}{label_col}{value}")
+
+def _doc_preview(doc, index: int, max_chars: int = 600):
+    meta = _get_meta(doc)
+    text = _get_text(doc)
+    print(f"\n    [{index}]  metadata : {json.dumps(meta, ensure_ascii=False)}")
+    print(f"         text     : {text[:max_chars]}{'...' if len(text) > max_chars else ''}")
+
+def _display_retrieved(result, jd_context, bsc_context, los_context):
+    """
+    Print the full retrieved context summary to the terminal.
+    Called inside /api/generate after extraction completes.
+    """
+
+    # ── Header ───────────────────────────────────────────────────────────────
+    _section("STEP 2 OF 4  —  RETRIEVED CONTEXT  (what the pipeline found for your query)")
+
+    # ── Detection summary ─────────────────────────────────────────────────────
+    _subsection("QUERY PARSING RESULT")
+    _kv("Division detected",   result.detected_division        or "❌ not detected")
+    _kv("Department detected", result.detected_department_name or "❌ not detected")
+    _kv("LOS dept key",        result.detected_department      or "❌ not detected")
+    _kv("Unit detected",       result.detected_unit            or "❌ not detected")
+    _kv("Job title detected",  result.detected_job_title       or "❌ not detected")
+
+    # ── Counts ───────────────────────────────────────────────────────────────
+    _subsection("RETRIEVAL COUNTS")
+    _kv("JD document",   "✅  1 found"                    if result.jd_doc  else "❌  not found")
+    _kv("BSC documents", f"✅  {len(result.bsc_docs)} retrieved  (keyword boost + FAISS similarity)")
+    _kv("LOS documents", f"✅  {len(result.los_docs)} retrieved  (department metadata filter)"
+                         if result.los_docs else "❌  0 found  (department not matched)")
+    _kv("JD length",     f"{len(jd_context):,} chars")
+    _kv("BSC length",    f"{len(bsc_context):,} chars  ({len(result.bsc_docs)} docs combined)")
+    _kv("LOS length",    f"{len(los_context):,} chars  ({len(result.los_docs)} docs combined)")
+
+    # ── JD ───────────────────────────────────────────────────────────────────
+    _subsection("JD DOCUMENT  (1 doc — matched via 4-stage funnel: division → dept → unit → job title)")
+    if result.jd_doc:
+        meta = _get_meta(result.jd_doc)
+        text = _get_text(result.jd_doc)
+        print(f"    metadata : {json.dumps(meta, ensure_ascii=False)}")
+        _blank()
+        print(f"    text preview:")
+        for line in text[:1200].splitlines():
+            print(f"      {line}")
+        if len(text) > 1200:
+            print(f"      ... [{len(text)-1200:,} more chars]")
+    else:
+        print("    No JD document found.")
+        print("    Tip: check that Division / Department / Unit / Job Title match your JD JSON metadata.")
+
+    # ── BSC ──────────────────────────────────────────────────────────────────
+    _subsection(f"BSC DOCUMENTS  ({len(result.bsc_docs)} docs — keyword boost then FAISS similarity fill)")
+    if result.bsc_docs:
+        for i, doc in enumerate(result.bsc_docs, 1):
+            _doc_preview(doc, i, max_chars=400)
+    else:
+        print("    No BSC documents retrieved.")
+
+    # ── LOS ──────────────────────────────────────────────────────────────────
+    _subsection(f"LOS DOCUMENTS  ({len(result.los_docs)} docs — filtered by department metadata)")
+    if result.los_docs:
+        for i, doc in enumerate(result.los_docs, 1):
+            _doc_preview(doc, i, max_chars=400)
+    else:
+        print("    No LOS documents found.")
+        print("    Tip: check LOS_DEPARTMENT_MAP in extractor.py — your department keyword must be listed.")
+
+    _blank()
+    _bar()
+
+
+def _display_prompt_summary(prompt: str, num_remaining: int):
+    _section("STEP 3 OF 4  —  PROMPT  (what is sent to the LLM)")
+    _kv("Prompt length",       f"{len(prompt):,} chars")
+    _kv("Objectives requested", f"{num_remaining}  (LLM generates these; critical target prepended separately)")
+    _kv("LLM model",           "llama3  via Ollama")
+    _kv("Temperature",         "0.3  (low = consistent structured output)")
+    _blank()
+    _bar()
+
+
+def _display_llm_result(all_objectives: list, total_weight: int):
+    _section("STEP 4 OF 4  —  LLM OUTPUT  (generated objectives)")
+    _blank()
+    for i, obj in enumerate(all_objectives, 1):
+        tag = "📌 FIXED" if i == 1 else f"   [{i}]   "
+        print(f"  {tag}  {obj.get('objective', '')}")
+        _kv("Measure",        obj.get("measure", ""),        indent=12)
+        _kv("Target",         obj.get("target", ""),         indent=12)
+        _kv("Weight",         f"{obj.get('weight_percent', '')}%  |  {obj.get('category', '')}",  indent=12)
+        _kv("Tracking",       f"{obj.get('tracking_source', '')}  |  {obj.get('time_frame', '')}",indent=12)
+        _blank()
+    _thin()
+    status = "✅" if total_weight == 100 else "⚠️ "
+    print(f"    Total weight : {total_weight}%  {status}")
+    _bar()
+    _blank()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STARTUP
+# ══════════════════════════════════════════════════════════════════════════════
+
 def _load_json_docs(path) -> list:
     p = Path(path)
     if not p.exists():
@@ -65,28 +186,28 @@ def _load_json_docs(path) -> list:
         return json.load(f)
 
 
-# ── startup: load docs + vectorstore once ─────────────────────────────────────
 def _build_extractor() -> QueryExtractor:
-    log.info("━" * 55)
-    log.info("  CBE PMS API  —  Starting up")
-    log.info("━" * 55)
+    _bar("═")
+    print("  CBE PMS API  —  Starting up")
+    _bar("═")
 
-    log.info("  Loading documents ...")
+    print("  [1/3]  Loading documents ...")
     los_docs = _load_json_docs(LOS_DATA_PATH)
     jd_docs  = _load_json_docs(JD_DATA_PATH)
     bsc_raw  = _load_json_docs(BSC_Data_PATH)
-    log.info(f"    LOS : {len(los_docs)} docs")
-    log.info(f"    JD  : {len(jd_docs)} docs")
-    log.info(f"    BSC : {len(bsc_raw)} docs")
+    _kv("LOS", f"{len(los_docs)} docs")
+    _kv("JD",  f"{len(jd_docs)} docs")
+    _kv("BSC", f"{len(bsc_raw)} docs")
 
-    log.info("  Loading embedding model ...")
+    print("\n  [2/3]  Loading embedding model ...")
+    _kv("Model", EMBEDDING_MODEL)
     bsc_vs = PMSVectorStore(embedding_model=EMBEDDING_MODEL, index_path=BSC_FAISS_PATH)
 
     if BSC_FAISS_PATH.exists():
-        log.info("  Loading BSC FAISS index from disk ...")
+        print("\n  [3/3]  Loading BSC FAISS index from disk ...")
         bsc_vs.load_vectorstore()
     else:
-        log.info("  Building BSC FAISS index (first run) ...")
+        print("\n  [3/3]  Building BSC FAISS index (first run — may take a minute) ...")
         bsc_lc = [
             Document(page_content=d["text"], metadata=d.get("metadata", {}))
             if isinstance(d, dict) else d
@@ -95,21 +216,25 @@ def _build_extractor() -> QueryExtractor:
         bsc_vs.create_vectorstore(bsc_lc)
         bsc_vs.save_vectorstore()
 
-    log.info("━" * 55)
-    log.info("  ✅  API ready  —  http://localhost:8000/docs")
-    log.info("━" * 55)
+    _blank()
+    _bar("═")
+    print("  ✅  API ready")
+    _kv("Swagger UI", "http://localhost:8000/docs")
+    _kv("Generate",   "POST http://localhost:8000/api/generate")
+    _kv("Health",     "GET  http://localhost:8000/api/health")
+    _bar("═")
+    _blank()
 
-    return QueryExtractor(
-        los_docs=los_docs,
-        jd_docs=jd_docs,
-        bsc_vectorstore=bsc_vs,
-    )
+    return QueryExtractor(los_docs=los_docs, jd_docs=jd_docs, bsc_vectorstore=bsc_vs)
 
 
 extractor = _build_extractor()
 
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# FASTAPI APP
+# ══════════════════════════════════════════════════════════════════════════════
+
 app = FastAPI(
     title="CBE PMS API",
     description="SMART performance objective generation for CBE employees.",
@@ -125,11 +250,12 @@ app.add_middleware(
 
 
 # ── models ────────────────────────────────────────────────────────────────────
+
 class GenerateRequest(BaseModel):
     division:       str = Field(..., example="Digital Banking")
-    department:     str = Field(..., example="Card Banking")
-    unit:           str = Field(..., example="ATM Operations")
-    job_title:      str = Field(..., example="Junior Officer")
+    department:     str = Field(..., example="Mobile &Internet Banking")
+    unit:           str = Field(..., example="Internet Banking Business")
+    job_title:      str = Field(..., example="Senior Digital Banking Officer")
     job_grade:      str = Field(..., example="13")
     num_objectives: int = Field(default=5, ge=2, le=10)
 
@@ -150,15 +276,24 @@ class GenerateResponse(BaseModel):
     total_weight:     int
 
 
-# ── endpoint ──────────────────────────────────────────────────────────────────
+# ── /api/generate ─────────────────────────────────────────────────────────────
+
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
 
-    log.info("─" * 55)
-    log.info(f"  REQUEST  │  {req.job_title}  │  {req.department}  │  Grade {req.job_grade}")
-    log.info("─" * 55)
+    # ── Request banner ────────────────────────────────────────────────────────
+    _section("NEW REQUEST  —  /api/generate")
+    _subsection("STEP 1 OF 4  —  INPUT  (received from UI form)")
+    _kv("Division",       req.division)
+    _kv("Department",     req.department)
+    _kv("Unit",           req.unit)
+    _kv("Job Title",      req.job_title)
+    _kv("Job Grade",      req.job_grade)
+    _kv("Num Objectives", str(req.num_objectives))
+    _blank()
+    _bar()
 
-    # 1. build query
+    # 1. Build query string
     query = (
         f"Division: {req.division}\n"
         f"Department: {req.department}\n"
@@ -167,57 +302,33 @@ def generate(req: GenerateRequest):
         f"Job Grade: {req.job_grade}"
     )
 
-    # 2. extraction
-    log.info("  [1/4]  Extracting context ...")
+    # 2. Extraction
+    print(f"\n  Running extraction ...")
     try:
         result = extractor.extract(query, bsc_k=5)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")
 
-    log.info(f"         JD  : {'✅ found' if result.jd_doc else '❌ not found'}")
-    log.info(f"         BSC : {len(result.bsc_docs)} docs")
-    log.info(f"         LOS : {len(result.los_docs)} docs")
-
     jd_context  = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
+
+    # ── Full terminal display of retrieved context ────────────────────────────
+    _display_retrieved(result, jd_context, bsc_context, los_context)
+
     context = {
-        "query": query,
+        "query":       query,
         "jd_context":  jd_context,
         "bsc_context": bsc_context,
         "los_context": los_context,
     }
-            # ============================================
-    log.info("=" * 80)
-    log.info("RETRIEVED CONTEXT DEBUG")
 
-    log.info(f"JD length  : {len(jd_context)}")
-    log.info(f"BSC length : {len(bsc_context)}")
-    log.info(f"LOS length : {len(los_context)}")
-
-    log.info("JD preview:")
-    log.info(jd_context[:1000] if jd_context else "No JD found")
-
-    for i, doc in enumerate(result.bsc_docs, 1):
-        txt = _get_text(doc)
-        log.info(f"BSC Doc {i} | len={len(txt)}")
-        log.info(txt[:500])
-
-    for i, doc in enumerate(result.los_docs, 1):
-        txt = _get_text(doc)
-        log.info(f"LOS Doc {i} | len={len(txt)}")
-        log.info(txt[:500])
-
-    log.info("=" * 80)
-
-    print("=" * 100)
-    # 3. build prompt
-    log.info("  [2/4]  Building prompt ...")
+    # 3. Build prompt
     prompt = build_prompt(context, req.num_objectives)
-    log.info(f"         Requesting {req.num_objectives - 1} objectives from LLM ...")
+    _display_prompt_summary(prompt, req.num_objectives - 1)
 
-    # 4. call Ollama
-    log.info("  [3/4]  Calling Ollama (llama3) ...")
+    # 4. Call Ollama
+    print(f"\n  Calling llama3 via Ollama ...")
     try:
         response = ollama.chat(
             model="llama3",
@@ -236,8 +347,7 @@ def generate(req: GenerateRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama error: {e}")
 
-    # 5. parse
-    log.info("  [4/4]  Parsing LLM response ...")
+    # 5. Parse
     raw = response["message"]["content"].strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -253,17 +363,23 @@ def generate(req: GenerateRequest):
             detail=f"LLM returned invalid JSON: {e}. Raw: {raw[:300]}",
         )
 
-    # fix weight sum
-    llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
-    if llm_weight != 50 and llm_objectives:
-        llm_objectives[-1]["weight_percent"] += 50 - llm_weight
+    # Fix weight sum to remaining budget
+    from llm.prompt_builder import load_role_rules
+    role_data      = load_role_rules(req.job_title)
+    remaining_wt   = role_data["rules"]["remaining_weight"]
+    llm_weight     = sum(o.get("weight_percent", 0) for o in llm_objectives)
+    if llm_weight != remaining_wt and llm_objectives:
+        llm_objectives[-1]["weight_percent"] += remaining_wt - llm_weight
 
-    # prepend fixed critical target
-    all_objectives = [load_critical_target()] + llm_objectives
+    # Prepend fixed critical target
+    critical       = load_critical_target()
+    critical["weight_percent"] = role_data["critical_info"]["weight"]
+    critical["target"]         = role_data["critical_info"]["target"]
+    all_objectives = [critical] + llm_objectives
     total_weight   = sum(o.get("weight_percent", 0) for o in all_objectives)
 
-    log.info(f"  ✅  Done  │  {len(all_objectives)} objectives  │  Total weight: {total_weight}%")
-    log.info("─" * 55)
+    # ── Full terminal display of objectives ───────────────────────────────────
+    _display_llm_result(all_objectives, total_weight)
 
     return GenerateResponse(
         employee_profile={

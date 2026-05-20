@@ -66,10 +66,10 @@ extractor = QueryExtractor(
 
 query = """
 Division: Digital Banking
-Job Title: Junior Officer
-Department:Card Banking
-Unit: ATM Operations
-Job Grade: 13
+Job Title:Digital Banking Officer
+Department:Mobile Money
+Unit:Mobile Money Business
+Job Grade:13
 """
 
 BSC_K = 5
