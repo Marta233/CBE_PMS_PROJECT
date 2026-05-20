@@ -364,18 +364,13 @@ def generate(req: GenerateRequest):
         )
 
     # Fix weight sum to remaining budget
-    from llm.prompt_builder import load_role_rules
-    role_data      = load_role_rules(req.job_title)
-    remaining_wt   = role_data["rules"]["remaining_weight"]
-    llm_weight     = sum(o.get("weight_percent", 0) for o in llm_objectives)
-    if llm_weight != remaining_wt and llm_objectives:
-        llm_objectives[-1]["weight_percent"] += remaining_wt - llm_weight
-
-    # Prepend fixed critical target
-    critical       = load_critical_target()
-    critical["weight_percent"] = role_data["critical_info"]["weight"]
-    critical["target"]         = role_data["critical_info"]["target"]
-    all_objectives = [critical] + llm_objectives
+    # fix weight sum
+    llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
+    if llm_weight != 50 and llm_objectives:
+        llm_objectives[-1]["weight_percent"] += 50 - llm_weight
+ 
+    # prepend fixed critical target
+    all_objectives = [load_critical_target()] + llm_objectives
     total_weight   = sum(o.get("weight_percent", 0) for o in all_objectives)
 
     # ── Full terminal display of objectives ───────────────────────────────────
