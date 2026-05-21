@@ -268,6 +268,7 @@ class Objective(BaseModel):
     category:        str
     tracking_source: str
     time_frame:      str
+    source:          str = Field(default="LLM Generated", description="Source of the objective (JD, BSC, LOS, Sample, LLM)")  # NEW
 
 
 class GenerateResponse(BaseModel):

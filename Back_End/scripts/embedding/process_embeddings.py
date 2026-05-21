@@ -72,7 +72,7 @@ Unit:Mobile Money Business
 Job Grade:13
 """
 
-BSC_K = 5
+BSC_K = 10
 
 print(f"\n🔍 Query:\n{query}")
 

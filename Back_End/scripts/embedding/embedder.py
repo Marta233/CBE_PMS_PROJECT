@@ -101,7 +101,7 @@ class PMSVectorStore:
     # 🔥 SEARCH (MAIN IMPROVED LOGIC)
     # =========================================================
 
-    def search(self, query: str, k: int = 5):
+    def search(self, query: str, k: int = 10):
 
         if self.vectorstore is None:
             raise ValueError("Vectorstore not loaded")
