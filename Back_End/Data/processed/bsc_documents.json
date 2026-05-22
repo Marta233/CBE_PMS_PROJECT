@@ -1,0 +1,418 @@
+[
+  {
+    "text": "Strategic Objective: Enhance Customer Value\n            KPI: Mobilize 0.3% of the annual deposit Plan from accounts with balance ≥100<1k=(Minimum Standard Accounts Group)\n            Measurement: Million birr\n            Target: 1369.8\n            weight: 4.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Mobilize 0.3% of the annual deposit Plan from accounts with balance ≥100<1k=(Minimum Standard Accounts Group)"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Value\n            KPI: Mobilize 53.4% of the annual deposit Plan from accounts with balance ≥1k<1m=(Small and Sufficiently Valuable Accounts Group)\n            Measurement: Million birr\n            Target: 243830.1\n            weight: 4.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Mobilize 53.4% of the annual deposit Plan from accounts with balance ≥1k<1m=(Small and Sufficiently Valuable Accounts Group)"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Value\n            KPI: Mobilize 41.3% of the annual deposit Plan from accounts with balance ≥1m<50m=(core Value Accounts Group)\n            Measurement: Million birr\n            Target: 188580.2\n            weight: 4.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Mobilize 41.3% of the annual deposit Plan from accounts with balance ≥1m<50m=(core Value Accounts Group)"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Value\n            KPI: Mobilize 5% of the annual deposit Plan from accounts with balance ≥50m=(Specially High Value Accounts Group)\n            Measurement: Million birr\n            Target: 22830.5\n            weight: 4.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Mobilize 5% of the annual deposit Plan from accounts with balance ≥50m=(Specially High Value Accounts Group)"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase FCY Earning\n            KPI: Remittance\n            Measurement: Thousand USD\n            Target: 1313357\n            weight: 10.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Remittance"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase FCY Earning\n            KPI: FCY Purchase\n            Measurement: Thousand USD\n            Target: 730139.2\n            weight: 6.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "FCY Purchase"
+    }
+  },
+  {
+    "text": "Strategic Objective: Ensure Prudent Resource Allocation\n            KPI: Loan Disbursement\n            Measurement: Million birr\n            Target: 95581.3\n            weight: 6.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Loan Disbursement"
+    }
+  },
+  {
+    "text": "Strategic Objective: Ensure Financial Soundness\n            KPI: Loan Collection\n            Measurement: Million birr\n            Target: 24761.8\n            weight: 6.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Loan Collection"
+    }
+  },
+  {
+    "text": "Strategic Objective: Ensure Financial Soundness\n            KPI: NPL Ratio\n            Measurement: %\n            Target: 0.01\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "NPL Ratio"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase income\n            KPI: Non interest income\n            Measurement: Million birr\n            Target: 15792.7\n            weight: 10.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Non interest income"
+    }
+  },
+  {
+    "text": "Strategic Objective: Manage Operational Expense\n            KPI: Operational Expense\n            Measurement: Million birr\n            Target: 4827.7\n            weight: 10.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Operational Expense"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase Customer Base\n            KPI: New Retail Deposit Customer recruitment\n            Measurement: Number\n            Target: 5019371\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "New Retail Deposit Customer recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase Customer Base\n            KPI: Active Retail Deposit Customer\n            Measurement: %\n            Target: 0.635\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Active Retail Deposit Customer"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase Customer Base\n            KPI: New Borrower Recruitment (Number)\n            Measurement: Number\n            Target: 42956\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "New Borrower Recruitment (Number)"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction rate\n            Measurement: %\n            Target: >80%\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Customer satisfaction rate"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Employee competency\n            KPI: Employee satisfaction score\n            Measurement: %\n            Target: >80%\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Employee satisfaction score"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Employee competency\n            KPI: Employee engagement score\n            Measurement: %\n            Target: >80%\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "RBB",
+      "kpi": "Employee engagement score"
+    }
+  },
+  {
+    "text": "Strategic Objective: Increase income from digital channels\n            KPI: Income From Digital Banking\n            Measurement: Million birr\n            Target: 10256.7\n            weight: 13.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Income From Digital Banking"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: New Active card banking users recruitment\n            Measurement: Number\n            Target: 3578733\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active card banking users recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active card banking users Incremental\n            Measurement: Number\n            Target: 5511447\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active card banking users Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active card banking users\n            Measurement: %\n            Target: 0.329\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active card banking users"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: New Active mobile banking users recruitment\n            Measurement: Number\n            Target: 6539114\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active mobile banking users recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active mobile banking users Incremental\n            Measurement: Number\n            Target: 8143652\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active mobile banking users Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active mobile banking users\n            Measurement: %\n            Target: 0.678\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active mobile banking users"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: New Active internet banking users recruitment\n            Measurement: Number\n            Target: 679994\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active internet banking users recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active internet banking users Incremental\n            Measurement: Number\n            Target: 698930\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active internet banking users Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active internet banking users\n            Measurement: %\n            Target: 0.936\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active internet banking users"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: New Active CBE-Birr users recruitment\n            Measurement: Number\n            Target: 4813992\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active CBE-Birr users recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active CBE-Birr Users Incremental\n            Measurement: Number\n            Target: 6087798\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active CBE-Birr Users Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Active CBE-Birr Users\n            Measurement: %\n            Target: 0.133\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active CBE-Birr Users"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channel utilization\n            KPI: Digital Transaction\n            Measurement: %\n            Target: 0.92\n            weight: 7.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Digital Transaction"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: ATM Deployed\n            Measurement: Number\n            Target: 813\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "ATM Deployed"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: POS deployed\n            Measurement: Number\n            Target: 3000\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "POS deployed"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Digital Branches opened\n            Measurement: Number\n            Target: 30\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Digital Branches opened"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: New Active agents recruitment\n            Measurement: Number\n            Target: 9863\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active agents recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Active Agents Incremental\n            Measurement: Number\n            Target: 16001\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active Agents Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Active Agents\n            Measurement: %\n            Target: 0.201\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active Agents"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: New Active CBE-Birr Merchants recruitment\n            Measurement: Number\n            Target: 14251\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "New Active CBE-Birr Merchants recruitment"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Active CBE-Birr Merchants Incremental\n            Measurement: Number\n            Target: 24871\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active CBE-Birr Merchants Incremental"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Active CBE-Birr Merchants\n            Measurement: %\n            Target: 0.193\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Active CBE-Birr Merchants"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Accessibility\n            KPI: Third parties integration\n            Measurement: Number\n            Target: 25\n            weight: 5.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Third parties integration"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance process efficiency and effectiveness\n            KPI: Minimized ATM Down time because of hard fault\n            Measurement: %\n            Target: <4.81%\n            weight: 5.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Minimized ATM Down time because of hard fault"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance digital channels functionality\n            KPI: Features added on existing digital channels\n            Measurement: Number\n            Target: 12\n            weight: 5.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Features added on existing digital channels"
+    }
+  },
+  {
+    "text": "Strategic Objective: Manage Operational Expense\n            KPI: Operational Expense\n            Measurement: Million birr\n            Target: 8055.4\n            weight: 10.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Operational Expense"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction score on ATM\n            Measurement: %\n            Target: 0.8\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Customer satisfaction score on ATM"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction score on POS\n            Measurement: %\n            Target: 0.8\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Customer satisfaction score on POS"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction score on Mobile Banking\n            Measurement: %\n            Target: 0.8\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Customer satisfaction score on Mobile Banking"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction score on CBE-Birr\n            Measurement: %\n            Target: 0.8\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Customer satisfaction score on CBE-Birr"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Customer Experience\n            KPI: Customer satisfaction score on Internet Banking\n            Measurement: %\n            Target: 0.8\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Customer satisfaction score on Internet Banking"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance information system protection and Awareness creation related with fraud\n            KPI: Fraud alerts and notifications via SMS about common fraud schemes to the customers\n            Measurement: Number\n            Target: 14\n            weight: 2.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Fraud alerts and notifications via SMS about common fraud schemes to the customers"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Employee competency\n            KPI: Employee satisfaction Score\n            Measurement: %\n            Target: >=baseline\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Employee satisfaction Score"
+    }
+  },
+  {
+    "text": "Strategic Objective: Enhance Employee competency\n            KPI: Employee engagement Score\n            Measurement: %\n            Target: >=baseline\n            weight: 1.0",
+    "metadata": {
+      "source": "BSC",
+      "division": "Digital Banking",
+      "kpi": "Employee engagement Score"
+    }
+  }
+]

@@ -50,7 +50,7 @@ def generate(num_objectives: int = 5):
 
     # ── 4. Call LLM ────────────────────────────────────────────────────────
     response = ollama.chat(
-        model="llama3",
+        model="llama3.2:1b",
         messages=[
             {
                 "role": "system",

@@ -268,9 +268,10 @@ class QueryExtractor:
         return None
 
     def _detect_raw_field(self, query: str, field: str) -> Optional[str]:
-        m = re.search(rf"{field}\s*:\s*(.+)", query, re.IGNORECASE)
+        m = re.search(rf"{field}\s*:\s*([^\n]+)", query, re.IGNORECASE)
         if m:
-            return re.sub(r"\s+", " ", m.group(1)).strip()
+            val = re.sub(r"\s+", " ", m.group(1)).strip()
+            return val if val else None
         return None
 
     def _detect_job_title(self, query: str) -> Optional[str]:

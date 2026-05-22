@@ -150,7 +150,7 @@ def _display_prompt_summary(prompt: str, num_remaining: int):
     _section("STEP 3 OF 4  —  PROMPT  (what is sent to the LLM)")
     _kv("Prompt length",       f"{len(prompt):,} chars")
     _kv("Objectives requested", f"{num_remaining}  (LLM generates these; critical target prepended separately)")
-    _kv("LLM model",           "llama3  via Ollama")
+    _kv("LLM model",           "llama3.2:1b  via Ollama")
     _kv("Temperature",         "0.3  (low = consistent structured output)")
     _blank()
     _bar()
@@ -256,18 +256,17 @@ class GenerateRequest(BaseModel):
     department:     str = Field(..., example="Mobile &Internet Banking")
     unit:           str = Field(..., example="Internet Banking Business")
     job_title:      str = Field(..., example="Senior Digital Banking Officer")
-    job_grade:      str = Field(..., example="13")
     num_objectives: int = Field(default=5, ge=2, le=10)
 
 
 class Objective(BaseModel):
     objective:       str
-    measure:         str
-    target:          str
+    measure:         str = "Various"
+    target:          str = ""
     weight_percent:  int
-    category:        str
-    tracking_source: str
-    time_frame:      str
+    category:        str = "Cannot Exceed"
+    tracking_source: str = "System"
+    time_frame:      str = "Quarterly"
 
 
 class GenerateResponse(BaseModel):
@@ -288,7 +287,6 @@ def generate(req: GenerateRequest):
     _kv("Department",     req.department)
     _kv("Unit",           req.unit)
     _kv("Job Title",      req.job_title)
-    _kv("Job Grade",      req.job_grade)
     _kv("Num Objectives", str(req.num_objectives))
     _blank()
     _bar()
@@ -298,8 +296,7 @@ def generate(req: GenerateRequest):
         f"Division: {req.division}\n"
         f"Department: {req.department}\n"
         f"Unit: {req.unit}\n"
-        f"Job Title: {req.job_title}\n"
-        f"Job Grade: {req.job_grade}"
+        f"Job Title: {req.job_title}"
     )
 
     # 2. Extraction
@@ -312,6 +309,11 @@ def generate(req: GenerateRequest):
     jd_context  = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
+
+    # Trim context to keep prompt within token budget for small models
+    jd_context  = jd_context[:800]
+    bsc_context = bsc_context[:600]
+    los_context = los_context[:1200]
 
     # ── Full terminal display of retrieved context ────────────────────────────
     _display_retrieved(result, jd_context, bsc_context, los_context)
@@ -328,27 +330,28 @@ def generate(req: GenerateRequest):
     _display_prompt_summary(prompt, req.num_objectives - 1)
 
     # 4. Call Ollama
-    print(f"\n  Calling llama3 via Ollama ...")
+    print(f"\n  Calling llama3.2:1b via Ollama ...")
     try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a PMS expert for Commercial Bank of Ethiopia. "
-                        "Output ONLY valid JSON. No markdown, no explanation."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            options={"temperature": 0.3, "top_p": 0.9},
+        response = ollama.generate(
+            model="llama3.2:1b",
+            prompt=(
+                "You are a PMS expert for Commercial Bank of Ethiopia. "
+                "Output ONLY valid JSON. No markdown, no explanation.\n\n"
+                + prompt
+            ),
+            format="json",
+            options={
+                "temperature": 0.3,
+                "top_p": 0.9,
+                "num_ctx": 8192,
+                "num_predict": 2048,
+            },
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama error: {e}")
 
     # 5. Parse
-    raw = response["message"]["content"].strip()
+    raw = response["response"].strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -364,10 +367,28 @@ def generate(req: GenerateRequest):
         )
 
     # Fix weight sum to remaining budget
-    # fix weight sum
+    llm_objectives = llm_objectives[: req.num_objectives - 1]  # enforce exact count
+
+    # Coerce all string fields — small models sometimes return numbers
+    for o in llm_objectives:
+        for field in ("objective", "measure", "target", "category", "tracking_source", "time_frame"):
+            if field in o and not isinstance(o[field], str):
+                o[field] = str(o[field])
+        # Ensure weight_percent is always present and is an int
+        if "weight_percent" not in o or not isinstance(o["weight_percent"], (int, float)):
+            o["weight_percent"] = 0
+        else:
+            o["weight_percent"] = int(o["weight_percent"])
+
     llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
-    if llm_weight != 50 and llm_objectives:
-        llm_objectives[-1]["weight_percent"] += 50 - llm_weight
+    if llm_weight == 0 and llm_objectives:
+        # LLM returned no weights — distribute 50% evenly
+        per = 50 // len(llm_objectives)
+        remainder = 50 - per * len(llm_objectives)
+        for i, o in enumerate(llm_objectives):
+            o["weight_percent"] = per + (remainder if i == len(llm_objectives) - 1 else 0)
+    elif llm_weight != 50 and llm_objectives:
+        llm_objectives[-1]["weight_percent"] = llm_objectives[-1].get("weight_percent", 0) + (50 - llm_weight)
  
     # prepend fixed critical target
     all_objectives = [load_critical_target()] + llm_objectives
@@ -382,7 +403,6 @@ def generate(req: GenerateRequest):
             "department": req.department,
             "unit":       req.unit,
             "job_title":  req.job_title,
-            "job_grade":  req.job_grade,
         },
         objectives=all_objectives,
         total_weight=total_weight,

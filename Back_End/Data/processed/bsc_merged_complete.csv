@@ -1,0 +1,53 @@
+division,strategic_objective,kpi,measurement,weight,plan
+RBB,Enhance Customer Value,Mobilize 0.3% of the annual deposit Plan from accounts with balance ≥100<1k=(Minimum Standard Accounts Group),Million birr,4.0,1369.8
+RBB,Enhance Customer Value,Mobilize 53.4% of the annual deposit Plan from accounts with balance ≥1k<1m=(Small and Sufficiently Valuable Accounts Group),Million birr,4.0,243830.1
+RBB,Enhance Customer Value,Mobilize 41.3% of the annual deposit Plan from accounts with balance ≥1m<50m=(core Value Accounts Group),Million birr,4.0,188580.2
+RBB,Enhance Customer Value,Mobilize 5% of the annual deposit Plan from accounts with balance ≥50m=(Specially High Value Accounts Group),Million birr,4.0,22830.5
+RBB,Increase FCY Earning,Remittance,Thousand USD,10.0,1313357
+RBB,Increase FCY Earning,FCY Purchase,Thousand USD,6.0,730139.2
+RBB,Ensure Prudent Resource Allocation,Loan Disbursement,Million birr,6.0,95581.3
+RBB,Ensure Financial Soundness,Loan Collection,Million birr,6.0,24761.8
+RBB,Ensure Financial Soundness,NPL Ratio,%,1.0,0.01
+RBB,Increase income,Non interest income,Million birr,10.0,15792.7
+RBB,Manage Operational Expense,Operational Expense,Million birr,10.0,4827.7
+RBB,Increase Customer Base,New Retail Deposit Customer recruitment,Number,2.0,5019371
+RBB,Increase Customer Base,Active Retail Deposit Customer,%,2.0,0.635
+RBB,Increase Customer Base,New Borrower Recruitment (Number),Number,2.0,42956
+RBB,Enhance Customer Experience,Customer satisfaction rate,%,2.0,>80%
+RBB,Enhance Employee competency,Employee satisfaction score,%,1.0,>80%
+RBB,Enhance Employee competency,Employee engagement score,%,1.0,>80%
+Digital Banking,Increase income from digital channels,Income From Digital Banking,Million birr,13.0,10256.7
+Digital Banking,Enhance digital channel utilization,New Active card banking users recruitment,Number,1.0,3578733
+Digital Banking,Enhance digital channel utilization,Active card banking users Incremental,Number,1.0,5511447
+Digital Banking,Enhance digital channel utilization,Active card banking users,%,2.0,0.329
+Digital Banking,Enhance digital channel utilization,New Active mobile banking users recruitment,Number,1.0,6539114
+Digital Banking,Enhance digital channel utilization,Active mobile banking users Incremental,Number,1.0,8143652
+Digital Banking,Enhance digital channel utilization,Active mobile banking users,%,2.0,0.678
+Digital Banking,Enhance digital channel utilization,New Active internet banking users recruitment,Number,1.0,679994
+Digital Banking,Enhance digital channel utilization,Active internet banking users Incremental,Number,1.0,698930
+Digital Banking,Enhance digital channel utilization,Active internet banking users,%,2.0,0.936
+Digital Banking,Enhance digital channel utilization,New Active CBE-Birr users recruitment,Number,1.0,4813992
+Digital Banking,Enhance digital channel utilization,Active CBE-Birr Users Incremental,Number,1.0,6087798
+Digital Banking,Enhance digital channel utilization,Active CBE-Birr Users,%,2.0,0.133
+Digital Banking,Enhance digital channel utilization,Digital Transaction,%,7.0,0.92
+Digital Banking,Enhance Accessibility,ATM Deployed,Number,1.0,813
+Digital Banking,Enhance Accessibility,POS deployed,Number,1.0,3000
+Digital Banking,Enhance Accessibility,Digital Branches opened,Number,1.0,30
+Digital Banking,Enhance Accessibility,New Active agents recruitment,Number,1.0,9863
+Digital Banking,Enhance Accessibility,Active Agents Incremental,Number,1.0,16001
+Digital Banking,Enhance Accessibility,Active Agents,%,2.0,0.201
+Digital Banking,Enhance Accessibility,New Active CBE-Birr Merchants recruitment,Number,1.0,14251
+Digital Banking,Enhance Accessibility,Active CBE-Birr Merchants Incremental,Number,1.0,24871
+Digital Banking,Enhance Accessibility,Active CBE-Birr Merchants,%,2.0,0.193
+Digital Banking,Enhance Accessibility,Third parties integration,Number,5.0,25
+Digital Banking,Enhance process efficiency and effectiveness,Minimized ATM Down time because of hard fault,%,5.0,<4.81%
+Digital Banking,Enhance digital channels functionality,Features added on existing digital channels,Number,5.0,12
+Digital Banking,Manage Operational Expense,Operational Expense,Million birr,10.0,8055.4
+Digital Banking,Enhance Customer Experience,Customer satisfaction score on ATM,%,2.0,0.8
+Digital Banking,Enhance Customer Experience,Customer satisfaction score on POS,%,2.0,0.8
+Digital Banking,Enhance Customer Experience,Customer satisfaction score on Mobile Banking,%,2.0,0.8
+Digital Banking,Enhance Customer Experience,Customer satisfaction score on CBE-Birr,%,2.0,0.8
+Digital Banking,Enhance Customer Experience,Customer satisfaction score on Internet Banking,%,2.0,0.8
+Digital Banking,Enhance information system protection and Awareness creation related with fraud,Fraud alerts and notifications via SMS about common fraud schemes to the customers,Number,2.0,14
+Digital Banking,Enhance Employee competency,Employee satisfaction Score,%,1.0,>=baseline
+Digital Banking,Enhance Employee competency,Employee engagement Score,%,1.0,>=baseline

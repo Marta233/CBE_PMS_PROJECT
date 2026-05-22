@@ -1,0 +1,18 @@
+division,strategic_objective,kpi,measurement,weight,plan
+RBB,Enhance Customer Value,Mobilize 0.3% of the annual deposit Plan from accounts with balance ≥100<1k=(Minimum Standard Accounts Group),Million birr,4.0,1369.8
+RBB,Enhance Customer Value,Mobilize 53.4% of the annual deposit Plan from accounts with balance ≥1k<1m=(Small and Sufficiently Valuable Accounts Group),Million birr,4.0,243830.1
+RBB,Enhance Customer Value,Mobilize 41.3% of the annual deposit Plan from accounts with balance ≥1m<50m=(core Value Accounts Group),Million birr,4.0,188580.2
+RBB,Enhance Customer Value,Mobilize 5% of the annual deposit Plan from accounts with balance ≥50m=(Specially High Value Accounts Group),Million birr,4.0,22830.5
+RBB,Increase FCY Earning,Remittance,Thousand USD,10.0,1313357
+RBB,Increase FCY Earning,FCY Purchase,Thousand USD,6.0,730139.2
+RBB,Ensure Prudent Resource Allocation,Loan Disbursement,Million birr,6.0,95581.3
+RBB,Ensure Financial Soundness,Loan Collection,Million birr,6.0,24761.8
+RBB,Ensure Financial Soundness,NPL Ratio,%,1.0,0.01
+RBB,Increase income,Non interest income,Million birr,10.0,15792.7
+RBB,Manage Operational Expense,Operational Expense,Million birr,10.0,4827.7
+RBB,Increase Customer Base,New Retail Deposit Customer recruitment,Number,2.0,5019371
+RBB,Increase Customer Base,Active Retail Deposit Customer,%,2.0,0.635
+RBB,Increase Customer Base,New Borrower Recruitment (Number),Number,2.0,42956
+RBB,Enhance Customer Experience,Customer satisfaction rate,%,2.0,>80%
+RBB,Enhance Employee competency,Employee satisfaction score,%,1.0,>80%
+RBB,Enhance Employee competency,Employee engagement score,%,1.0,>80%
