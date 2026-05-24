@@ -1,6 +1,8 @@
 """
-extractor.py  (v6 — flexible matching with debugging)
+extractor.py  (v7 — with UI department/unit mapping for JD matching)
 ---------------------------------------
+- Maps UI department/unit values to JD document field values
+- Handles ampersand variations (& vs and)
 - Shows actual field values from JD docs when no match found
 - Department matching: checks exact, substring, and variations
 - Unit + Title exact match required
@@ -25,7 +27,11 @@ def _normalize(text: str) -> str:
     """Normalize text for comparison (lowercase, single spaces, trimmed)."""
     if not text:
         return ""
-    return re.sub(r"\s+", " ", text).strip().lower()
+    # Replace ampersand variations with 'and' for consistent matching
+    text = text.replace("&", "and")
+    # Remove extra spaces that might come from "& " -> "and " (space remains)
+    text = re.sub(r"\s+", " ", text).strip().lower()
+    return text
 
 
 # =========================================================
@@ -53,6 +59,157 @@ LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
         "merchant agent management", "merchant management",
         "agent management", "pos merchant",
     ],
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# JD DEPARTMENT MAPPING - Maps UI department values to JD department field
+# ─────────────────────────────────────────────────────────────────────────
+
+JD_DEPARTMENT_MAP: dict[str, list[str]] = {
+    # RBB Departments
+    "Corporate": ["Corporate"],
+    "Operations": ["Operations"],
+    "Commercial": ["Commercial"],
+    "Technology": ["Technology"],
+    "Finance": ["Finance"],
+    "Human Resources": ["Human Resources", "HR", "Human Resource"],
+    "Legal & Compliance": ["Legal & Compliance", "Legal", "Compliance"],
+    "Strategy & Planning": ["Strategy & Planning", "Strategy", "Planning"],
+    
+    # Digital Banking Departments
+    "Internal Control": ["Internal Control", "Internal Audit", "Control"],
+    
+    "Digital Banking Reconciliation and Dispute Management": [
+        "Digital Banking Reconciliation and Dispute Management",
+        "Digital Banking Reconciliation",
+        "Reconciliation and Dispute Management",
+        "Reconciliation",
+    ],
+    
+    "Merchant and Agent Management": [
+        "Merchant and Agent Management",
+        "Merchant and Agent",
+        "Merchant Management",
+        "Agent Management",
+    ],
+    
+    # CRITICAL: Handle all variations of Mobile & Internet Banking
+    "Mobile &Internet Banking": [
+        "Mobile and Internet Banking",
+        "Mobile & Internet Banking",
+        "Mobile &Internet Banking",
+    ],
+    
+    "Mobile Money": [
+        "Mobile Money", 
+        "Mobile Money Business", 
+        "Mobile Payment",
+        "Mobile Money & Payment",
+    ],
+    
+    "Card Banking": [
+        "Card Banking", 
+        "Card", 
+        "Cards",
+        "Card Business",
+    ],
+}
+
+# ─────────────────────────────────────────────────────────────────────────
+# JD UNIT MAPPING - Maps UI unit values to JD Unit field
+# ─────────────────────────────────────────────────────────────────────────
+
+JD_UNIT_MAP: dict[str, list[str]] = {
+    # Internal Control
+    "Internal Control": ["Internal Control"],
+    
+    # Digital Banking Reconciliation and Dispute Management
+    "Digital Banking Reconciliation and Dispute Management": [
+        "Digital Banking Reconciliation and Dispute Management",
+    ],
+    "Merchant and Agent Reconciliation": [
+        "Merchant and Agent Reconciliation",
+        "Merchant Agent Reconciliation",
+    ],
+    "Mobile and Internet Banking Reconciliation": [
+        "Mobile and Internet Banking Reconciliation",
+        "Mobile & Internet Banking Reconciliation",
+        "Mobile &Internet Banking Reconciliation",
+    ],
+    "International Card Transaction Reconciliation": [
+        "International Card Transaction Reconciliation",
+        "International Card Reconciliation",
+    ],
+    "Domestic Card Transaction Reconciliation": [
+        "Domestic Card Transaction Reconciliation",
+        "Domestic Card Reconciliation",
+    ],
+    "Mobile Money Reconciliation": [
+        "Mobile Money Reconciliation",
+    ],
+    
+    # Merchant and Agent Management
+    "Merchant and Agent Management": ["Merchant and Agent Management"],
+    "Merchant Management": ["Merchant Management"],
+    "Agent Management": ["Agent Management"],
+    "Digital Partners Relationship": ["Digital Partners Relationship", "Partners Relationship"],
+    
+    # Mobile and Internet Banking
+    "Mobile and Internet Banking": [
+        "Mobile and Internet Banking",
+        "Mobile & Internet Banking",
+        "Mobile &Internet Banking",
+    ],
+    "Mobile Banking Business": [
+        "Mobile Banking Business", 
+        "Mobile Business",
+        "Mobile Banking",
+    ],
+    "Internet Banking Business": [
+        "Internet Banking Business", 
+        "Internet Business",
+        "Internet Banking",
+    ],
+    
+    # Mobile Money
+    "Mobile Money": ["Mobile Money"],
+    "Mobile Money Business": [
+        "Mobile Money Business",
+        "Mobile Money",
+    ],
+    
+    # Card Banking
+    "Card Banking": ["Card Banking"],
+    "ATM Operations Support": [
+        "ATM Operations Support", 
+        "ATM Support", 
+        "ATM Operations",
+    ],
+    "Card Banking Business": [
+        "Card Banking Business", 
+        "Card Business",
+        "Card Banking",
+    ],
+    "Card Production and Distribution": [
+        "Card Production and Distribution", 
+        "Card Production", 
+        "Card Distribution",
+    ],
+    "Card Issuance Solution Management": [
+        "Card Issuance Solution Management",
+        "Card Issuance Solution",
+        "Issuance Solution",
+    ],
+}
+
+# ─────────────────────────────────────────────────────────────────────────
+# DIVISION MAPPING
+# ─────────────────────────────────────────────────────────────────────────
+
+JD_DIVISION_MAP: dict[str, list[str]] = {
+    "RBB": ["RBB", "Retail & Branch Banking", "Retail and Branch Banking", "Retail Banking"],
+    "Digital Banking": ["Digital Banking", "Digital", "Digital Bank"],
 }
 
 
@@ -261,17 +418,24 @@ class QueryExtractor:
 
     def _detect_division_keyword(self, query: str) -> Optional[str]:
         q = _normalize(query)
+        
+        # Check mapping
+        for jd_div, ui_list in JD_DIVISION_MAP.items():
+            for ui_val in ui_list:
+                if _normalize(ui_val) in q:
+                    return jd_div
+        
+        # Fallback to simple detection
         if "digital banking" in q:
             return "Digital Banking"
         if "retail & branch" in q or "rbb" in q:
-            return "Retail & Branch Banking"
+            return "RBB"
         return None
 
     def _detect_raw_field(self, query: str, field: str) -> Optional[str]:
-        m = re.search(rf"{field}\s*:\s*([^\n]+)", query, re.IGNORECASE)
+        m = re.search(rf"{field}\s*:\s*(.+)", query, re.IGNORECASE)
         if m:
-            val = re.sub(r"\s+", " ", m.group(1)).strip()
-            return val if val else None
+            return re.sub(r"\s+", " ", m.group(1)).strip()
         return None
 
     def _detect_job_title(self, query: str) -> Optional[str]:
@@ -286,6 +450,61 @@ class QueryExtractor:
                 val = raw.split(":", 1)[-1].strip() if ":" in raw else raw
                 return re.sub(r"\s+", " ", val).strip()
         return None
+
+    # ----------------------------------------------------------
+    # HELPER METHODS FOR MAPPING
+    # ----------------------------------------------------------
+
+    def _get_division_variants(self, division: Optional[str]) -> set:
+        """Get all possible variants for a division name."""
+        if not division:
+            return set()
+        
+        division_norm = _normalize(division)
+        variants = {division_norm}
+        
+        # Check mapping
+        for jd_div, ui_list in JD_DIVISION_MAP.items():
+            for ui_val in ui_list:
+                if _normalize(ui_val) == division_norm:
+                    variants.add(_normalize(jd_div))
+                    break
+        
+        return variants
+
+    def _get_department_variants(self, department: Optional[str]) -> set:
+        """Get all possible variants for a department name."""
+        if not department:
+            return set()
+        
+        dept_norm = _normalize(department)
+        variants = {dept_norm}
+        
+        # Check mapping
+        for jd_dept, ui_list in JD_DEPARTMENT_MAP.items():
+            for ui_val in ui_list:
+                if _normalize(ui_val) == dept_norm:
+                    variants.add(_normalize(jd_dept))
+                    break
+        
+        return variants
+
+    def _get_unit_variants(self, unit: Optional[str]) -> set:
+        """Get all possible variants for a unit name."""
+        if not unit:
+            return set()
+        
+        unit_norm = _normalize(unit)
+        variants = {unit_norm}
+        
+        # Check mapping
+        for jd_unit, ui_list in JD_UNIT_MAP.items():
+            for ui_val in ui_list:
+                if _normalize(ui_val) == unit_norm:
+                    variants.add(_normalize(jd_unit))
+                    break
+        
+        return variants
 
     # ----------------------------------------------------------
     # BSC RETRIEVAL
@@ -333,7 +552,7 @@ class QueryExtractor:
         return matched
 
     # ----------------------------------------------------------
-    # JD FLEXIBLE MATCH (with debugging)
+    # JD FLEXIBLE MATCH (with mapping support)
     # ----------------------------------------------------------
 
     def _match_jd_flexible(
@@ -345,11 +564,7 @@ class QueryExtractor:
         job_grade: Optional[str] = None,
     ):
         """
-        Flexible JD matching:
-        - Shows all JD documents with their actual field values when no match found
-        - Department: flexible matching (exact, substring, or "Director X" matches "X")
-        - Unit and Title: exact match required
-        - Division: flexible
+        Flexible JD matching with mapping support for department and unit.
         """
         if not self.jd_docs:
             logger.warning("  No JD documents available")
@@ -358,12 +573,16 @@ class QueryExtractor:
         logger.info(f"\n  JD Match Search:")
         logger.info(f"  Query: division={division}, department={department}, unit={unit}, title={job_title}, grade={job_grade}")
 
-        # Normalize query values
-        q_division = _normalize(division) if division else None
-        q_department = _normalize(department) if department else None
-        q_unit = _normalize(unit) if unit else None
-        q_job_title = _normalize(job_title) if job_title else None
-        q_job_grade = _normalize(job_grade) if job_grade else None
+        # Get mapped variants for flexible matching
+        q_division_variants = self._get_division_variants(division)
+        q_department_variants = self._get_department_variants(department)
+        q_unit_variants = self._get_unit_variants(unit)
+        q_job_title_norm = _normalize(job_title) if job_title else None
+        
+        # Debug logging
+        logger.info(f"  Division variants: {q_division_variants}")
+        logger.info(f"  Department variants: {q_department_variants}")
+        logger.info(f"  Unit variants: {q_unit_variants}")
 
         candidates = []
         all_docs_info = []
@@ -393,57 +612,62 @@ class QueryExtractor:
                 'grade': doc_job_grade_raw
             })
 
-            # Check matches with flexibility
+            # Check matches with mapping support
             match_score = 0
             reasons = []
 
-            # Division match (flexible)
-            if q_division:
-                if doc_division_norm == q_division:
+            # Division match (using variants)
+            if q_division_variants:
+                if doc_division_norm in q_division_variants or any(
+                    variant in doc_division_norm for variant in q_division_variants
+                ):
                     match_score += 1
                     reasons.append(f"division ✓ '{doc_division_raw}'")
-                elif q_division in doc_division_norm or doc_division_norm in q_division:
-                    match_score += 0.5
-                    reasons.append(f"division ~ '{doc_division_raw}'")
                 else:
-                    continue  # Division must match at least partially
+                    continue
 
-            # Department match (flexible: exact OR "Director X" matches "X")
-            if q_department:
-                # Check exact
-                if doc_department_norm == q_department:
-                    match_score += 1
-                    reasons.append(f"dept ✓ '{doc_department_raw}'")
-                # Check if query department is contained in doc department (e.g., "Card" in "Director Card Banking")
-                elif q_department in doc_department_norm:
-                    match_score += 0.8
-                    reasons.append(f"dept ~ '{doc_department_raw}' (contains '{department}')")
-                # Check if doc department without "director" matches query
-                elif doc_department_norm.replace("director", "").strip() == q_department:
-                    match_score += 0.9
-                    reasons.append(f"dept ~ '{doc_department_raw}' (Director variant)")
-                else:
-                    continue  # Department must match at least partially
+            # Department match (using mapped variants)
+            if q_department_variants:
+                dept_matched = False
+                for variant in q_department_variants:
+                    if variant in doc_department_norm or doc_department_norm in variant:
+                        dept_matched = True
+                        match_score += 1
+                        reasons.append(f"dept ✓ '{doc_department_raw}' (matched via '{variant}')")
+                        break
+                    # Check without "Director" prefix
+                    doc_dept_clean = doc_department_norm.replace("director", "").strip()
+                    if variant == doc_dept_clean:
+                        dept_matched = True
+                        match_score += 0.9
+                        reasons.append(f"dept ~ '{doc_department_raw}' (Director variant)")
+                        break
+                if not dept_matched:
+                    continue
 
-            # Unit match (required if provided)
-            if q_unit:
-                if doc_unit_norm == q_unit:
-                    match_score += 2
-                    reasons.append(f"unit ✓ '{doc_unit_raw}'")
-                else:
-                    continue  # Unit must match exactly
+            # Unit match (using mapped variants)
+            if q_unit_variants:
+                unit_matched = False
+                for variant in q_unit_variants:
+                    if variant == doc_unit_norm or variant in doc_unit_norm or doc_unit_norm in variant:
+                        unit_matched = True
+                        match_score += 2
+                        reasons.append(f"unit ✓ '{doc_unit_raw}' (matched via '{variant}')")
+                        break
+                if not unit_matched:
+                    continue
 
-            # Job title match (required if provided)
-            if q_job_title:
-                if doc_job_title_norm == q_job_title:
+            # Job title match (exact required if provided)
+            if q_job_title_norm:
+                if doc_job_title_norm == q_job_title_norm:
                     match_score += 3
                     reasons.append(f"title ✓ '{doc_job_title_raw}'")
                 else:
-                    continue  # Title must match exactly
+                    continue
 
             # Job grade match (bonus if provided)
-            if q_job_grade:
-                if doc_job_grade_norm == q_job_grade:
+            if job_grade:
+                if doc_job_grade_norm == _normalize(job_grade):
                     match_score += 1
                     reasons.append(f"grade ✓ '{doc_job_grade_raw}'")
 
@@ -460,7 +684,7 @@ class QueryExtractor:
         # No match found - show all JD documents for debugging
         logger.info(f"\n  ✗ No match found. Available JD documents in your file:")
         logger.info(f"  " + "-" * 70)
-        for info in all_docs_info[:15]:  # Show first 15
+        for info in all_docs_info[:15]:
             logger.info(f"    JD {info['index']}:")
             logger.info(f"      Division   : {info['division']}")
             logger.info(f"      Department : {info['department']}")

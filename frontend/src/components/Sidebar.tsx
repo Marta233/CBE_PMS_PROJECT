@@ -37,8 +37,8 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
             style={{ background: 'rgba(255,255,255,0.08)' }}
           />
           <div className="min-w-0">
-            <p className="text-white font-bold text-sm leading-tight tracking-wide truncate">PerformAI</p>
-            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>CBE Management System</p>
+            <p className="text-white font-bold text-sm leading-tight tracking-wide truncate">AI Based</p>
+            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.45)' }}>CBE PMS Management System</p>
           </div>
         </div>
       </div>

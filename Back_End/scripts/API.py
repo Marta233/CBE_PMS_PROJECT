@@ -150,7 +150,7 @@ def _display_prompt_summary(prompt: str, num_remaining: int):
     _section("STEP 3 OF 4  —  PROMPT  (what is sent to the LLM)")
     _kv("Prompt length",       f"{len(prompt):,} chars")
     _kv("Objectives requested", f"{num_remaining}  (LLM generates these; critical target prepended separately)")
-    _kv("LLM model",           "llama3.2:1b  via Ollama")
+    _kv("LLM model",           "llama3  via Ollama")
     _kv("Temperature",         "0.3  (low = consistent structured output)")
     _blank()
     _bar()
@@ -228,22 +228,32 @@ def _build_extractor() -> QueryExtractor:
     return QueryExtractor(los_docs=los_docs, jd_docs=jd_docs, bsc_vectorstore=bsc_vs)
 
 
-extractor = _build_extractor()
+extractor = None   # initialised in startup event below
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FASTAPI APP
 # ══════════════════════════════════════════════════════════════════════════════
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global extractor
+    extractor = _build_extractor()   # runs AFTER middleware is registered
+    yield
+
 app = FastAPI(
     title="CBE PMS API",
     description="SMART performance objective generation for CBE employees.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -256,29 +266,35 @@ class GenerateRequest(BaseModel):
     department:     str = Field(..., example="Mobile &Internet Banking")
     unit:           str = Field(..., example="Internet Banking Business")
     job_title:      str = Field(..., example="Senior Digital Banking Officer")
+    job_grade:      str = Field(..., example="13")
     num_objectives: int = Field(default=5, ge=2, le=10)
 
 
 class Objective(BaseModel):
     objective:       str
-    measure:         str = "Various"
-    target:          str = ""
-    weight_percent:  int
-    category:        str = "Cannot Exceed"
-    tracking_source: str = "System"
-    time_frame:      str = "Quarterly"
+    measure:         str
+    target:          str
+    weight_percent:  float
+    category:        str
+    tracking_source: str
+    time_frame:      str
+    source:          str = Field(default="LLM Generated", description="Source of the objective (JD, BSC, LOS, Sample, LLM)")  # NEW
 
 
 class GenerateResponse(BaseModel):
     employee_profile: dict
     objectives:       list[Objective]
-    total_weight:     int
+    total_weight:     float
 
 
 # ── /api/generate ─────────────────────────────────────────────────────────────
 
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
+
+    # ── Guard: extractor must be ready ──────────────────────────────────────
+    if extractor is None:
+        raise HTTPException(status_code=503, detail="Server is still initializing. Please retry in a few seconds.")
 
     # ── Request banner ────────────────────────────────────────────────────────
     _section("NEW REQUEST  —  /api/generate")
@@ -287,6 +303,7 @@ def generate(req: GenerateRequest):
     _kv("Department",     req.department)
     _kv("Unit",           req.unit)
     _kv("Job Title",      req.job_title)
+    _kv("Job Grade",      req.job_grade)
     _kv("Num Objectives", str(req.num_objectives))
     _blank()
     _bar()
@@ -296,7 +313,8 @@ def generate(req: GenerateRequest):
         f"Division: {req.division}\n"
         f"Department: {req.department}\n"
         f"Unit: {req.unit}\n"
-        f"Job Title: {req.job_title}"
+        f"Job Title: {req.job_title}\n"
+        f"Job Grade: {req.job_grade}"
     )
 
     # 2. Extraction
@@ -309,11 +327,6 @@ def generate(req: GenerateRequest):
     jd_context  = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
-
-    # Trim context to keep prompt within token budget for small models
-    jd_context  = jd_context[:800]
-    bsc_context = bsc_context[:600]
-    los_context = los_context[:1200]
 
     # ── Full terminal display of retrieved context ────────────────────────────
     _display_retrieved(result, jd_context, bsc_context, los_context)
@@ -330,28 +343,27 @@ def generate(req: GenerateRequest):
     _display_prompt_summary(prompt, req.num_objectives - 1)
 
     # 4. Call Ollama
-    print(f"\n  Calling llama3.2:1b via Ollama ...")
+    print(f"\n  Calling llama3 via Ollama ...")
     try:
-        response = ollama.generate(
-            model="llama3.2:1b",
-            prompt=(
-                "You are a PMS expert for Commercial Bank of Ethiopia. "
-                "Output ONLY valid JSON. No markdown, no explanation.\n\n"
-                + prompt
-            ),
-            format="json",
-            options={
-                "temperature": 0.3,
-                "top_p": 0.9,
-                "num_ctx": 8192,
-                "num_predict": 2048,
-            },
+        response = ollama.chat(
+            model="llama3",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a PMS expert for Commercial Bank of Ethiopia. "
+                        "Output ONLY valid JSON. No markdown, no explanation."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            options={"temperature": 0.3, "top_p": 0.9},
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ollama error: {e}")
 
     # 5. Parse
-    raw = response["response"].strip()
+    raw = response.message.content.strip()          # ✅ ChatResponse is a Pydantic object — use attribute access
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -366,29 +378,12 @@ def generate(req: GenerateRequest):
             detail=f"LLM returned invalid JSON: {e}. Raw: {raw[:300]}",
         )
 
-    # Fix weight sum to remaining budget
-    llm_objectives = llm_objectives[: req.num_objectives - 1]  # enforce exact count
-
-    # Coerce all string fields — small models sometimes return numbers
-    for o in llm_objectives:
-        for field in ("objective", "measure", "target", "category", "tracking_source", "time_frame"):
-            if field in o and not isinstance(o[field], str):
-                o[field] = str(o[field])
-        # Ensure weight_percent is always present and is an int
-        if "weight_percent" not in o or not isinstance(o["weight_percent"], (int, float)):
-            o["weight_percent"] = 0
-        else:
-            o["weight_percent"] = int(o["weight_percent"])
-
-    llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
-    if llm_weight == 0 and llm_objectives:
-        # LLM returned no weights — distribute 50% evenly
-        per = 50 // len(llm_objectives)
-        remainder = 50 - per * len(llm_objectives)
-        for i, o in enumerate(llm_objectives):
-            o["weight_percent"] = per + (remainder if i == len(llm_objectives) - 1 else 0)
-    elif llm_weight != 50 and llm_objectives:
-        llm_objectives[-1]["weight_percent"] = llm_objectives[-1].get("weight_percent", 0) + (50 - llm_weight)
+    # Always normalize LLM weights to exactly 50% (critical target holds the other 50%)
+    if llm_objectives:
+        llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
+        llm_objectives[-1]["weight_percent"] = round(
+            llm_objectives[-1].get("weight_percent", 0) + (50 - llm_weight), 2
+        )
  
     # prepend fixed critical target
     all_objectives = [load_critical_target()] + llm_objectives
@@ -403,6 +398,7 @@ def generate(req: GenerateRequest):
             "department": req.department,
             "unit":       req.unit,
             "job_title":  req.job_title,
+            "job_grade":  req.job_grade,
         },
         objectives=all_objectives,
         total_weight=total_weight,

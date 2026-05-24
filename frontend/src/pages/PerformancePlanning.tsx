@@ -1,459 +1,401 @@
+// PerformancePlanning.tsx — Table shows EXACTLY what LLM returns, per-row edit modal
+
 import { useState } from 'react';
 import {
-  Sparkles, Plus, Trash2, ChevronDown, Save,
-  CreditCard as Edit2, Check, X, Target, Clock,
-  TrendingUp, RefreshCw, AlertCircle,
+  Sparkles, Plus, ChevronDown, Save, Edit2, Trash2,
+  RefreshCw, AlertCircle, Target, X, Check, Download,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { supabase } from '../lib/supabase';
 import {
-  DIVISIONS,
-  DEPARTMENTS,
-  UNITS,
-  JOB_TITLES,
-  JOB_TITLES_BY_UNIT,
-  TIMELINES,
-  STATUS_COLORS,
-  type Objective,
+  DIVISIONS, DEPARTMENTS, UNITS, JOB_TITLES, JOB_TITLES_BY_UNIT,
   type ObjectiveSet,
-  type KeyResult,
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
-// ── Backend response shape ────────────────────────────────────────────────────
-interface BackendObjective {
-  objective: string;
-  measure: string;
-  target: string;
-  weight_percent: number;
-  category: string;
-  tracking_source: string;
-  time_frame: string;
+// ── Exact shape the backend/LLM returns ──────────────────────────────────────
+interface LLMObjective {
+  id:              string;   // client-only
+  objective:       string;   // "Define and update all ATM terminals..."
+  measure:         string;   // "%"  |  "Number"  |  "Various"
+  target:          string;   // "100%"  |  "50% of manager's target"
+  weight_percent:  number;   // 50 | 15 | 10 …
+  category:        string;   // "Cannot Exceed" | "Can Exceed"
+  tracking_source: string;   // "System" | "Manual" | "System & Manual"
+  time_frame:      string;   // "Quarterly" | "Annual" …
 }
 
+interface BackendObjective {
+  objective: string; measure: string; target: string;
+  weight_percent: number; category: string;
+  tracking_source: string; time_frame: string;
+}
 interface BackendResponse {
   employee_profile: Record<string, string>;
   objectives: BackendObjective[];
   total_weight: number;
 }
 
-// ── Map backend time_frame → frontend timeline ────────────────────────────────
-function mapTimeFrame(tf: string): string {
-  const map: Record<string, string> = {
-    Monthly: 'Q1',
-    Quarterly: 'Q1',
-    Annually: 'Annual',
-    Annual: 'Annual',
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+function fromBackend(b: BackendObjective): LLMObjective {
+  return {
+    id:              uid(),
+    objective:       b.objective,
+    measure:         b.measure,
+    target:          b.target,
+    weight_percent:  b.weight_percent,
+    category:        b.category,        // "Cannot Exceed" / "Can Exceed"
+    tracking_source: b.tracking_source,
+    time_frame:      b.time_frame,
   };
-  return map[tf] ?? 'Annual';
 }
 
-// ── Transform backend objectives → frontend Objective shape ───────────────────
-function mapBackendObjectives(
-  backendObjs: BackendObjective[],
-): Omit<Objective, 'id' | 'set_id' | 'created_at' | 'updated_at'>[] {
-  return backendObjs.map((obj) => ({
-    title: obj.objective,
-    description: `[${obj.category}] Tracked via: ${obj.tracking_source}. Measure: ${obj.measure}.`,
-    key_results: [
-      { text: obj.objective, target: obj.target, measure: obj.measure },
-    ],
-    weight: obj.weight_percent,
-    timeline: mapTimeFrame(obj.time_frame),
-    status: 'draft',
-    progress: 0,
-  }));
-}
-
-// ── Call the FastAPI backend ──────────────────────────────────────────────────
-async function fetchObjectivesFromAPI(
-  division: string,
-  department: string,
-  unit: string,
-  jobTitle: string,
-  count: number,
-): Promise<Omit<Objective, 'id' | 'set_id' | 'created_at' | 'updated_at'>[]> {
+async function callAPI(
+  division: string, department: string, unit: string,
+  jobTitle: string, jobGrade: string, count: number,
+): Promise<LLMObjective[]> {
   const res = await fetch(`${API_URL}/api/generate`, {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      division,
-      department,
-      unit,
-      job_title: jobTitle,
-      num_objectives: count,
+    body:    JSON.stringify({
+      division, department, unit,
+      job_title: jobTitle, job_grade: jobGrade, num_objectives: count,
     }),
   });
-
-  if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`Backend error ${res.status}: ${detail}`);
-  }
-
+  if (!res.ok)
+    throw new Error(`Backend error ${res.status}: ${await res.text().catch(() => res.statusText)}`);
   const data: BackendResponse = await res.json();
-  return mapBackendObjectives(data.objectives);
+  return data.objectives.map(fromBackend);
 }
 
-interface EditingState {
-  objectiveId: string | null;
-  field: string | null;
+// ── Downloads ─────────────────────────────────────────────────────────────────
+function downloadCSV(rows: LLMObjective[], meta: ObjectiveSet | null) {
+  const header = ['#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category', 'Tracking Source', 'Time Frame'];
+  const body   = rows.map((r, i) => [
+    i + 1,
+    `"${r.objective.replace(/"/g, '""')}"`,
+    `"${r.measure}"`,
+    `"${r.target.replace(/"/g, '""')}"`,
+    r.weight_percent,
+    `"${r.category}"`,
+    `"${r.tracking_source}"`,
+    `"${r.time_frame}"`,
+  ]);
+  const metaLines = meta
+    ? `Division,${meta.division}\nDepartment,${meta.department}\nUnit,${meta.unit}\nJob Title,${meta.job_title}\nGenerated,${new Date().toLocaleString()}\n\n`
+    : '';
+  const csv  = metaLines + [header.join(','), ...body.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a'); a.href = url; a.download = 'objectives.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
+function downloadJSON(rows: LLMObjective[], meta: ObjectiveSet | null) {
+  const payload = { employee_profile: meta ?? {}, generated_at: new Date().toISOString(), objectives: rows };
+  const blob    = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url     = URL.createObjectURL(blob);
+  const a       = document.createElement('a'); a.href = url; a.download = 'objectives.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Edit modal ────────────────────────────────────────────────────────────────
+function EditModal({
+  row, onSave, onClose,
+}: {
+  row:     LLMObjective;
+  onSave:  (updated: LLMObjective) => void;
+  onClose: () => void;
+}) {
+  const [d, setD] = useState<LLMObjective>({ ...row });
+
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 transition-all';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+              style={{ backgroundColor: '#892d8f' }}>
+              <Edit2 size={13} />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Edit Objective</h2>
+          </div>
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Fields */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
+          {/* Objective */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Objective</label>
+            <textarea rows={3} value={d.objective}
+              onChange={e => setD(p => ({ ...p, objective: e.target.value }))}
+              className={`${inputCls} resize-none`} />
+          </div>
+
+          {/* Measure + Target */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Measure</label>
+              <input type="text" value={d.measure}
+                onChange={e => setD(p => ({ ...p, measure: e.target.value }))}
+                className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Target</label>
+              <input type="text" value={d.target}
+                onChange={e => setD(p => ({ ...p, target: e.target.value }))}
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Weight + Category */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Weight (%)</label>
+              <input type="number" value={d.weight_percent}
+                onChange={e => setD(p => ({ ...p, weight_percent: parseFloat(e.target.value) || 0 }))}
+                className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Category</label>
+              <select value={d.category}
+                onChange={e => setD(p => ({ ...p, category: e.target.value }))}
+                className={inputCls}>
+                <option>Cannot Exceed</option>
+                <option>Can Exceed</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Tracking Source + Time Frame */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Tracking Source</label>
+              <select value={d.tracking_source}
+                onChange={e => setD(p => ({ ...p, tracking_source: e.target.value }))}
+                className={inputCls}>
+                <option>System</option>
+                <option>Manual</option>
+                <option>System &amp; Manual</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Time Frame</label>
+              <select value={d.time_frame}
+                onChange={e => setD(p => ({ ...p, time_frame: e.target.value }))}
+                className={inputCls}>
+                {['Monthly', 'Quarterly', 'Annual', 'Q1', 'Q2', 'Q3', 'Q4', 'H1', 'H2'].map(o => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-700">
+          <button onClick={onClose}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors">
+            <X size={14} />Cancel
+          </button>
+          <button onClick={() => onSave(d)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
+            style={{ backgroundColor: '#892d8f' }}>
+            <Check size={14} />Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 export default function PerformancePlanning() {
-  const [division, setDivision] = useState('');
-  const [department, setDepartment] = useState('');
-  const [unit, setUnit] = useState('');
-  const [jobTitle, setJobTitle] = useState('');
+  const [division,      setDivision]      = useState('');
+  const [department,    setDepartment]    = useState('');
+  const [unit,          setUnit]          = useState('');
+  const [jobTitle,      setJobTitle]      = useState('');
+  const [jobGrade,      setJobGrade]      = useState('');
   const [numObjectives, setNumObjectives] = useState(5);
-  const [generating, setGenerating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
+  const [generating,    setGenerating]    = useState(false);
+  const [genError,      setGenError]      = useState<string | null>(null);
 
-  const [currentSet, setCurrentSet] = useState<ObjectiveSet | null>(null);
-  const [objectives, setObjectives] = useState<Objective[]>([]);
-  const [editing, setEditing] = useState<EditingState>({ objectiveId: null, field: null });
-  const [editValue, setEditValue] = useState('');
+  const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(null);
+  const [objectives,  setObjectives]  = useState<LLMObjective[]>([]);
+  const [editingRow,  setEditingRow]  = useState<LLMObjective | null>(null);
 
-  const availableDepartments = division ? DEPARTMENTS[division] || [] : [];
-  const availableUnits = department ? UNITS[department] || [] : [];
-  const availableJobTitles = unit
-    ? JOB_TITLES_BY_UNIT[unit] || JOB_TITLES
+  const availableDepartments = division   ? DEPARTMENTS[division]           || [] : [];
+  const availableUnits       = department ? UNITS[department]               || [] : [];
+  const availableJobTitles   = unit
+    ? JOB_TITLES_BY_UNIT[unit]       || JOB_TITLES
     : department
     ? JOB_TITLES_BY_UNIT[department] || JOB_TITLES
     : JOB_TITLES;
 
-  const canGenerate = division && department && jobTitle && numObjectives > 0;
+  const canGenerate = !!(division && department && jobTitle);
 
-  async function handleGenerate() {
+  async function handleGenerate(isRegen = false) {
     if (!canGenerate) return;
-    setGenerating(true);
-    setGenError(null);
+    setGenerating(true); setGenError(null);
     try {
-      // 1. Call the real backend API
-      const generated = await fetchObjectivesFromAPI(
-        division, department, unit, jobTitle, numObjectives,
-      );
-
-      // 2. Create objective_set record in Supabase
-      const { data: setData, error: setError } = await supabase
-        .from('objective_sets')
-        .insert({
-          division,
-          department,
-          unit,
-          job_title: jobTitle,
-          num_objectives: numObjectives,
-          status: 'draft',
-        })
-        .select()
-        .single();
-
-      if (setError) throw setError;
-      setCurrentSet(setData);
-
-      // 3. Insert objectives into Supabase
-      const { data: objData, error: objError } = await supabase
-        .from('objectives')
-        .insert(generated.map((o) => ({ ...o, set_id: setData.id })))
-        .select();
-
-      if (objError) throw objError;
-      setObjectives(objData || []);
-    } catch (err: any) {
-      console.error('Generate error:', err);
-      setGenError(err?.message ?? 'Failed to generate objectives. Is the backend running?');
+      const rows = await callAPI(division, department, unit, jobTitle, jobGrade, numObjectives);
+      if (!isRegen || !currentSet) {
+        setCurrentSet({
+          id: uid(), division, department, unit, job_title: jobTitle,
+          num_objectives: numObjectives, status: 'draft',
+          created_at: new Date().toISOString(),
+        });
+      }
+      setObjectives(rows);
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Failed to generate. Is the backend running?');
     } finally {
       setGenerating(false);
     }
   }
 
-  async function handleRegenerate() {
+  function saveEdit(updated: LLMObjective) {
+    setObjectives(prev => prev.map(o => o.id === updated.id ? updated : o));
+    setEditingRow(null);
+  }
+
+  function deleteRow(id: string) {
+    setObjectives(prev => prev.filter(o => o.id !== id));
+  }
+
+  function addRow() {
     if (!currentSet) return;
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const generated = await fetchObjectivesFromAPI(
-        division, department, unit, jobTitle, numObjectives,
-      );
-
-      await supabase.from('objectives').delete().eq('set_id', currentSet.id);
-
-      const { data, error } = await supabase
-        .from('objectives')
-        .insert(generated.map((o) => ({ ...o, set_id: currentSet.id })))
-        .select();
-      if (error) throw error;
-      setObjectives(data || []);
-    } catch (err: any) {
-      console.error('Regenerate error:', err);
-      setGenError(err?.message ?? 'Failed to regenerate objectives.');
-    } finally {
-      setGenerating(false);
-    }
+    setObjectives(prev => [...prev, {
+      id: uid(),
+      objective:       'New Objective',
+      measure:         '%',
+      target:          'Define target',
+      weight_percent:  10,
+      category:        'Can Exceed',
+      tracking_source: 'System',
+      time_frame:      'Quarterly',
+    }]);
   }
 
-  function startEdit(objectiveId: string, field: string, currentValue: string) {
-    setEditing({ objectiveId, field });
-    setEditValue(currentValue);
-  }
-
-  async function commitEdit(objective: Objective) {
-    if (!editing.objectiveId || !editing.field) return;
-    const updates: Partial<Objective> = { updated_at: new Date().toISOString() };
-    if (editing.field === 'title') updates.title = editValue;
-    if (editing.field === 'description') updates.description = editValue;
-    if (editing.field === 'timeline') updates.timeline = editValue;
-    if (editing.field === 'weight') updates.weight = parseInt(editValue) || objective.weight;
-    if (editing.field === 'progress') updates.progress = Math.min(100, Math.max(0, parseInt(editValue) || 0));
-    if (editing.field === 'status') updates.status = editValue;
-
-    const { error } = await supabase.from('objectives').update(updates).eq('id', objective.id);
-    if (!error) {
-      setObjectives((prev) =>
-        prev.map((o) => (o.id === objective.id ? { ...o, ...updates } : o))
-      );
-    }
-    setEditing({ objectiveId: null, field: null });
-  }
-
-  async function updateKeyResult(objectiveId: string, index: number, field: keyof KeyResult, value: string) {
-    const obj = objectives.find((o) => o.id === objectiveId);
-    if (!obj) return;
-    const updatedKRs = obj.key_results.map((kr, i) =>
-      i === index ? { ...kr, [field]: value } : kr
-    );
-    const { error } = await supabase
-      .from('objectives')
-      .update({ key_results: updatedKRs, updated_at: new Date().toISOString() })
-      .eq('id', objectiveId);
-    if (!error) {
-      setObjectives((prev) =>
-        prev.map((o) => (o.id === objectiveId ? { ...o, key_results: updatedKRs } : o))
-      );
-    }
-  }
-
-  async function addKeyResult(objectiveId: string) {
-    const obj = objectives.find((o) => o.id === objectiveId);
-    if (!obj) return;
-    const newKR: KeyResult = { text: 'New key result', target: 'Target', measure: 'Measurement method' };
-    const updatedKRs = [...obj.key_results, newKR];
-    const { error } = await supabase
-      .from('objectives')
-      .update({ key_results: updatedKRs })
-      .eq('id', objectiveId);
-    if (!error) {
-      setObjectives((prev) =>
-        prev.map((o) => (o.id === objectiveId ? { ...o, key_results: updatedKRs } : o))
-      );
-    }
-  }
-
-  async function removeKeyResult(objectiveId: string, index: number) {
-    const obj = objectives.find((o) => o.id === objectiveId);
-    if (!obj) return;
-    const updatedKRs = obj.key_results.filter((_, i) => i !== index);
-    const { error } = await supabase
-      .from('objectives')
-      .update({ key_results: updatedKRs })
-      .eq('id', objectiveId);
-    if (!error) {
-      setObjectives((prev) =>
-        prev.map((o) => (o.id === objectiveId ? { ...o, key_results: updatedKRs } : o))
-      );
-    }
-  }
-
-  async function removeObjective(objectiveId: string) {
-    const { error } = await supabase.from('objectives').delete().eq('id', objectiveId);
-    if (!error) {
-      setObjectives((prev) => prev.filter((o) => o.id !== objectiveId));
-    }
-  }
-
-  async function addObjective() {
-    if (!currentSet) return;
-    const newObj = {
-      set_id: currentSet.id,
-      title: 'New Objective',
-      description: 'Describe this objective and its business impact.',
-      key_results: [{ text: 'Key result 1', target: 'Target', measure: 'Measurement' }],
-      weight: 10,
-      timeline: 'Annual',
-      status: 'draft',
-      progress: 0,
-    };
-    const { data, error } = await supabase.from('objectives').insert(newObj).select().single();
-    if (!error && data) {
-      setObjectives((prev) => [...prev, data]);
-    }
-  }
-
-  async function handleSave() {
-    if (!currentSet) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from('objective_sets')
-      .update({ status: 'active' })
-      .eq('id', currentSet.id);
-    if (!error) {
-      setCurrentSet({ ...currentSet, status: 'active' });
-    }
-    setSaving(false);
-  }
-
-  const totalWeight = objectives.reduce((sum, o) => sum + o.weight, 0);
+  const totalWeight = objectives.reduce((s, o) => s + o.weight_percent, 0);
+  const weightOk    = Math.abs(totalWeight - 100) <= 1;
 
   return (
-    <Layout
-      title="Performance Planning"
-      subtitle="Generate AI-powered objectives aligned to your role and department"
-    >
-      {/* Config Panel */}
+    <Layout title="Performance Planning"
+      subtitle="Generate AI-powered objectives aligned to your role and department">
+
+      {/* ── Config panel ──────────────────────────────────────────────────── */}
       <div className="card p-6 mb-6">
         <div className="flex items-center gap-2 mb-5">
-          <Sparkles size={18} className="text-brand-500" />
+          <Sparkles size={18} style={{ color: '#892d8f' }} />
           <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
             Configure Objective Generation
           </h2>
         </div>
 
-        {/* Row 1: Division / Department / Unit / Job Title */}
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           {/* Division */}
           <div>
             <label className="label">Division</label>
             <div className="relative">
-              <select
-                value={division}
-                onChange={(e) => { setDivision(e.target.value); setDepartment(''); setUnit(''); }}
-                className="select-field pr-8"
-              >
+              <select value={division}
+                onChange={e => { setDivision(e.target.value); setDepartment(''); setUnit(''); setJobTitle(''); }}
+                className="select-field pr-8">
                 <option value="">Select division</option>
-                {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
           </div>
-
           {/* Department */}
           <div>
             <label className="label">Department</label>
             <div className="relative">
-              <select
-                value={department}
-                onChange={(e) => { setDepartment(e.target.value); setUnit(''); setJobTitle(''); }}
-                disabled={!division}
-                className="select-field pr-8 disabled:opacity-50"
-              >
+              <select value={department} disabled={!division}
+                onChange={e => { setDepartment(e.target.value); setUnit(''); setJobTitle(''); }}
+                className="select-field pr-8 disabled:opacity-50">
                 <option value="">Select department</option>
-                {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+                {availableDepartments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
           </div>
-
           {/* Unit */}
           <div>
-            <label className="label">
-              Unit <span className="text-slate-400 normal-case font-normal">(optional)</span>
-            </label>
+            <label className="label">Unit </label>
             <div className="relative">
-              <select
-                value={unit}
-                onChange={(e) => { setUnit(e.target.value); setJobTitle(''); }}
-                disabled={!department}
-                className="select-field pr-8 disabled:opacity-50"
-              >
+              <select value={unit} disabled={!department}
+                onChange={e => { setUnit(e.target.value); setJobTitle(''); }}
+                className="select-field pr-8 disabled:opacity-50">
                 <option value="">Select unit</option>
-                {availableUnits.map((u) => <option key={u} value={u}>{u}</option>)}
+                {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
           </div>
-
           {/* Job Title */}
           <div>
             <label className="label">Job Title</label>
             <div className="relative">
-              <select
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-                className="select-field pr-8"
-              >
+              <select value={jobTitle} onChange={e => setJobTitle(e.target.value)} className="select-field pr-8">
                 <option value="">Select title</option>
-                {availableJobTitles.map((t) => <option key={t} value={t}>{t}</option>)}
+                {availableJobTitles.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
           </div>
         </div>
 
-        {/* Row 2: Num Objectives + Generate button */}
-        <div className="flex items-end gap-4">
-          {/* Number of Objectives */}
+        <div className="flex items-end gap-4 flex-wrap">
+          {/* Job Grade */}
+          <div>
+            <label className="label">Job Grade <span className="text-slate-400 normal-case font-normal">(optional)</span></label>
+            <input type="text" value={jobGrade} onChange={e => setJobGrade(e.target.value)}
+              placeholder="e.g. 13" className="select-field w-28" />
+          </div>
+          {/* Num Objectives */}
           <div>
             <label className="label">No. of Objectives</label>
             <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden bg-white dark:bg-slate-700 h-[42px]">
-              <input
-                type="number"
-                min={2}
-                max={10}
-                value={numObjectives}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value);
-                  if (!isNaN(v)) setNumObjectives(Math.min(10, Math.max(2, v)));
-                }}
-                className="w-16 px-3 text-sm font-semibold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none"
-              />
-              <div className="flex flex-col h-full border-l border-slate-200 dark:border-slate-600 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setNumObjectives((n) => Math.min(10, n + 1))}
-                  disabled={numObjectives >= 10}
-                  className="flex-1 w-8 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-800/30 hover:text-brand-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors border-b border-slate-200 dark:border-slate-600 text-xs font-bold leading-none"
-                  aria-label="Increase"
-                >+</button>
-                <button
-                  type="button"
-                  onClick={() => setNumObjectives((n) => Math.max(2, n - 1))}
-                  disabled={numObjectives <= 2}
-                  className="flex-1 w-8 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-800/30 hover:text-brand-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs font-bold leading-none"
-                  aria-label="Decrease"
-                >−</button>
+              <input type="number" min={2} max={10} value={numObjectives}
+                onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setNumObjectives(Math.min(10, Math.max(2, v))); }}
+                className="w-16 px-3 text-sm font-semibold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none" />
+              <div className="flex flex-col h-full border-l border-slate-200 dark:border-slate-600">
+                <button onClick={() => setNumObjectives(n => Math.min(10, n + 1))} disabled={numObjectives >= 10}
+                  className="flex-1 w-8 flex items-center justify-center text-slate-500 hover:text-purple-600 disabled:opacity-30 border-b border-slate-200 text-xs font-bold">+</button>
+                <button onClick={() => setNumObjectives(n => Math.max(2, n - 1))} disabled={numObjectives <= 2}
+                  className="flex-1 w-8 flex items-center justify-center text-slate-500 hover:text-purple-600 disabled:opacity-30 text-xs font-bold">−</button>
               </div>
             </div>
           </div>
-
+          {/* Generate */}
           <div className="flex items-center gap-3 pb-0.5">
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate || generating}
-              className="btn-primary"
-            >
-              {generating ? (
-                <>
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                  </svg>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles size={16} />
-                  Generate Objectives
-                </>
-              )}
+            <button onClick={() => handleGenerate(false)} disabled={!canGenerate || generating}
+              className="btn-primary">
+              {generating
+                ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>Generating...</>
+                : <><Sparkles size={16}/>Generate Objectives</>}
             </button>
             {!canGenerate && (
-              <p className="text-sm text-slate-400">Fill in Division, Department, and Job Title to generate</p>
+              <p className="text-sm text-slate-400">Fill in Division, Department, and Job Title first</p>
             )}
           </div>
         </div>
 
-        {/* Error banner */}
         {genError && (
           <div className="mt-4 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
             <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
@@ -462,324 +404,186 @@ export default function PerformancePlanning() {
         )}
       </div>
 
-      {/* Generated Objectives */}
+      {/* ── Results table ─────────────────────────────────────────────────── */}
       {objectives.length > 0 && (
-        <div className="animate-slide-up">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-                Generated Objectives
-              </h2>
-              <span className="badge bg-brand-100 text-brand-600">
+        <div>
+          {/* Toolbar */}
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Generated Objectives</h2>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                 {objectives.length} objectives
               </span>
-              <span
-                className={`badge ${
-                  Math.abs(totalWeight - 100) > 1 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
-                }`}
-              >
-                Weight: {totalWeight}%
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                Total weight: {totalWeight}% {weightOk ? '✓' : '⚠ should be 100%'}
               </span>
-              {currentSet && (
-                <span className={`badge ${STATUS_COLORS[currentSet.status]}`}>
-                  {currentSet.status}
-                </span>
-              )}
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleRegenerate} disabled={generating} className="btn-secondary text-xs">
-                <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
-                Regenerate
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => handleGenerate(true)} disabled={generating}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
+                <RefreshCw size={14} className={generating ? 'animate-spin' : ''}/>Regenerate
               </button>
-              <button onClick={addObjective} className="btn-secondary text-xs">
-                <Plus size={14} />
-                Add Objective
+              <button onClick={addRow}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors">
+                <Plus size={14}/>Add Row
               </button>
-              <button onClick={handleSave} disabled={saving} className="btn-primary text-xs">
-                <Save size={14} />
-                {saving ? 'Saving...' : 'Save & Activate'}
+              <button onClick={() => downloadCSV(objectives, currentSet)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors">
+                <Download size={14}/>CSV
+              </button>
+              <button onClick={() => downloadJSON(objectives, currentSet)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors">
+                <Download size={14}/>JSON
+              </button>
+              <button
+                onClick={() => setCurrentSet(s => s ? { ...s, status: 'active' } : s)}
+                className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
+                style={{ backgroundColor: '#892d8f' }}>
+                <Save size={14}/>Save & Activate
               </button>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {objectives.map((obj, idx) => (
-              <ObjectiveCard
-                key={obj.id}
-                objective={obj}
-                index={idx}
-                editing={editing}
-                editValue={editValue}
-                setEditValue={setEditValue}
-                onStartEdit={startEdit}
-                onCommitEdit={commitEdit}
-                onCancelEdit={() => setEditing({ objectiveId: null, field: null })}
-                onUpdateKeyResult={updateKeyResult}
-                onAddKeyResult={addKeyResult}
-                onRemoveKeyResult={removeKeyResult}
-                onRemoveObjective={removeObjective}
-              />
-            ))}
+          {/* Table */}
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" style={{ minWidth: '960px' }}>
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                    {[
+                      { label: '#',         cls: 'w-10'  },
+                      { label: 'Objective', cls: 'w-72'  },
+                      { label: 'Measure',   cls: 'w-24'  },
+                      { label: 'Target',    cls: 'w-52'  },
+                      { label: 'Weight (%)',cls: 'w-28'  },
+                      { label: 'Category',  cls: 'w-36'  },
+                      { label: 'Actions',   cls: 'w-24'  },
+                    ].map(c => (
+                      <th key={c.label}
+                        className={`text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap ${c.cls}`}>
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {objectives.map((obj, idx) => (
+                    <tr key={obj.id}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-700/40 transition-colors group align-top">
+
+                      {/* # */}
+                      <td className="px-4 py-3.5">
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center text-white text-xs font-bold"
+                          style={{ backgroundColor: '#892d8f' }}>
+                          {idx + 1}
+                        </div>
+                      </td>
+
+                      {/* Objective */}
+                      <td className="px-4 py-3.5">
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100 leading-snug">
+                          {obj.objective}
+                        </p>
+                        {idx === 0 && (
+                          <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                            📌 Critical Target
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Measure */}
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {obj.measure}
+                        </span>
+                      </td>
+
+                      {/* Target */}
+                      <td className="px-4 py-3.5">
+                        <p className="text-sm text-slate-700 dark:text-slate-200 leading-snug">{obj.target}</p>
+                      </td>
+
+                      {/* Weight */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 w-10">
+                            {obj.weight_percent}%
+                          </span>
+                          <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden w-10">
+                            <div className="h-full rounded-full"
+                              style={{ width: `${Math.min(100, obj.weight_percent)}%`, backgroundColor: '#892d8f' }} />
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Category — "Cannot Exceed" / "Can Exceed" */}
+                      <td className="px-4 py-3.5">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                          obj.category === 'Cannot Exceed'
+                            ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                            : 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        }`}>
+                          {obj.category}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => setEditingRow(obj)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
+                            style={{ backgroundColor: '#892d8f' }}>
+                            <Edit2 size={11}/>Edit
+                          </button>
+                          <button onClick={() => deleteRow(obj.id)}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                            <Trash2 size={13}/>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+
+                {/* Total weight footer */}
+                <tfoot>
+                  <tr className="bg-slate-50 dark:bg-slate-700/30 border-t-2 border-slate-200 dark:border-slate-600">
+                    <td className="px-4 py-3" colSpan={4}>
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Weight</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm font-bold ${weightOk ? 'text-green-600' : 'text-amber-600'}`}>
+                        {totalWeight}% {weightOk ? '✓' : '⚠'}
+                      </span>
+                    </td>
+                    <td colSpan={2}/>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Empty state */}
       {objectives.length === 0 && !generating && (
         <div className="card p-12 text-center">
-          <div className="w-16 h-16 bg-brand-50 dark:bg-brand-800/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Target size={28} className="text-brand-500" />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: 'rgba(137,45,143,0.08)' }}>
+            <Target size={28} style={{ color: '#892d8f' }} />
           </div>
-          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 mb-2">
-            No Objectives Generated Yet
-          </h3>
+          <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 mb-2">No Objectives Generated Yet</h3>
           <p className="text-sm text-slate-500 max-w-sm mx-auto">
-            Select your division, department, job title, and number of objectives, then click "Generate Objectives" to create AI-powered performance goals.
+            Select your division, department, job title, and number of objectives, then click "Generate Objectives".
           </p>
         </div>
       )}
+
+      {/* Edit modal */}
+      {editingRow && (
+        <EditModal row={editingRow} onSave={saveEdit} onClose={() => setEditingRow(null)} />
+      )}
     </Layout>
-  );
-}
-
-// ── ObjectiveCard ─────────────────────────────────────────────────────────────
-
-interface ObjectiveCardProps {
-  objective: Objective;
-  index: number;
-  editing: EditingState;
-  editValue: string;
-  setEditValue: (v: string) => void;
-  onStartEdit: (id: string, field: string, value: string) => void;
-  onCommitEdit: (obj: Objective) => void;
-  onCancelEdit: () => void;
-  onUpdateKeyResult: (id: string, index: number, field: keyof KeyResult, value: string) => void;
-  onAddKeyResult: (id: string) => void;
-  onRemoveKeyResult: (id: string, index: number) => void;
-  onRemoveObjective: (id: string) => void;
-}
-
-function ObjectiveCard({
-  objective,
-  index,
-  editing,
-  editValue,
-  setEditValue,
-  onStartEdit,
-  onCommitEdit,
-  onCancelEdit,
-  onUpdateKeyResult,
-  onAddKeyResult,
-  onRemoveKeyResult,
-  onRemoveObjective,
-}: ObjectiveCardProps) {
-  const isEditingThis = editing.objectiveId === objective.id;
-
-  function InlineEdit({
-    field,
-    value,
-    multiline = false,
-    inputType = 'text',
-    selectOptions,
-    className = '',
-  }: {
-    field: string;
-    value: string | number;
-    multiline?: boolean;
-    inputType?: string;
-    selectOptions?: string[];
-    className?: string;
-  }) {
-    const isActive = isEditingThis && editing.field === field;
-    if (isActive) {
-      if (selectOptions) {
-        return (
-          <span className="inline-flex items-center gap-1">
-            <select
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="border border-brand-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-slate-700 dark:text-slate-100"
-              autoFocus
-            >
-              {selectOptions.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <button onClick={() => onCommitEdit(objective)} className="text-green-600 hover:text-green-700"><Check size={14} /></button>
-            <button onClick={onCancelEdit} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-          </span>
-        );
-      }
-      if (multiline) {
-        return (
-          <span className="block">
-            <textarea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              className="w-full border border-brand-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none dark:bg-slate-700 dark:text-slate-100"
-              rows={3}
-              autoFocus
-            />
-            <span className="inline-flex gap-1 mt-1">
-              <button onClick={() => onCommitEdit(objective)} className="text-green-600 hover:text-green-700"><Check size={14} /></button>
-              <button onClick={onCancelEdit} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-            </span>
-          </span>
-        );
-      }
-      return (
-        <span className="inline-flex items-center gap-1">
-          <input
-            type={inputType}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onCommitEdit(objective);
-              if (e.key === 'Escape') onCancelEdit();
-            }}
-            className={`border border-brand-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-slate-700 dark:text-slate-100 ${className}`}
-            autoFocus
-          />
-          <button onClick={() => onCommitEdit(objective)} className="text-green-600 hover:text-green-700"><Check size={14} /></button>
-          <button onClick={onCancelEdit} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-        </span>
-      );
-    }
-    return (
-      <span
-        className="cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded px-1 -mx-1 group inline-flex items-center gap-1 transition-colors"
-        onClick={() => onStartEdit(objective.id, field, String(value))}
-      >
-        <span>{String(value)}</span>
-        <Edit2 size={11} className="text-slate-300 group-hover:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-      </span>
-    );
-  }
-
-  return (
-    <div className="card overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/40">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-brand-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">
-            {index + 1}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-slate-900 dark:text-white text-sm">
-              <InlineEdit field="title" value={objective.title} className="w-72" />
-            </h3>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
-            <Clock size={13} className="text-slate-400" />
-            <span className="text-xs text-slate-600 dark:text-slate-300">
-              <InlineEdit field="timeline" value={objective.timeline} selectOptions={TIMELINES} />
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <TrendingUp size={13} className="text-slate-400" />
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              <InlineEdit field="weight" value={objective.weight} inputType="number" className="w-16" />%
-            </span>
-          </div>
-          <span className={`badge ${STATUS_COLORS[objective.status]}`}>
-            <InlineEdit
-              field="status"
-              value={objective.status}
-              selectOptions={['draft', 'in_progress', 'completed', 'cancelled']}
-            />
-          </span>
-          <button
-            onClick={() => onRemoveObjective(objective.id)}
-            className="p-1 text-slate-300 hover:text-red-500 transition-colors rounded"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      <div className="px-5 py-4">
-        {/* Description */}
-        <div className="mb-4">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Description</p>
-          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            <InlineEdit field="description" value={objective.description} multiline />
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Progress</p>
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-              <InlineEdit field="progress" value={objective.progress} inputType="number" className="w-16" />%
-            </span>
-          </div>
-          <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-brand-500 rounded-full transition-all duration-500"
-              style={{ width: `${objective.progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Key Results */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Key Results</p>
-            <button
-              onClick={() => onAddKeyResult(objective.id)}
-              className="text-xs text-brand-500 hover:text-brand-600 flex items-center gap-1 font-medium"
-            >
-              <Plus size={12} /> Add KR
-            </button>
-          </div>
-          <div className="space-y-2">
-            {objective.key_results.map((kr, krIdx) => (
-              <div
-                key={krIdx}
-                className="flex items-start gap-2 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg group"
-              >
-                <div className="w-4 h-4 rounded-full border-2 border-brand-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0 grid grid-cols-3 gap-2">
-                  <div className="col-span-3 md:col-span-1">
-                    <input
-                      type="text"
-                      value={kr.text}
-                      onChange={(e) => onUpdateKeyResult(objective.id, krIdx, 'text', e.target.value)}
-                      className="w-full text-sm text-slate-700 dark:text-slate-200 bg-transparent border-0 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:border focus:border-brand-300 rounded px-1 -mx-1"
-                      placeholder="Key result..."
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={kr.target}
-                      onChange={(e) => onUpdateKeyResult(objective.id, krIdx, 'target', e.target.value)}
-                      className="w-full text-xs text-brand-600 dark:text-brand-300 font-medium bg-transparent border-0 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:border focus:border-brand-300 rounded px-1 -mx-1"
-                      placeholder="Target..."
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      value={kr.measure}
-                      onChange={(e) => onUpdateKeyResult(objective.id, krIdx, 'measure', e.target.value)}
-                      className="w-full text-xs text-slate-500 dark:text-slate-400 bg-transparent border-0 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:border focus:border-brand-300 rounded px-1 -mx-1"
-                      placeholder="Measurement..."
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => onRemoveKeyResult(objective.id, krIdx)}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all flex-shrink-0"
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
