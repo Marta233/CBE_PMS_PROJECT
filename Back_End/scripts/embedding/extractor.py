@@ -1,14 +1,3 @@
-"""
-extractor.py  (v7 — with UI department/unit mapping for JD matching)
----------------------------------------
-- Maps UI department/unit values to JD document field values
-- Handles ampersand variations (& vs and)
-- Shows actual field values from JD docs when no match found
-- Department matching: checks exact, substring, and variations
-- Unit + Title exact match required
-- Division flexible matching
-"""
-
 from __future__ import annotations
 import logging
 import re
@@ -67,16 +56,6 @@ LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
 # ─────────────────────────────────────────────────────────────────────────
 
 JD_DEPARTMENT_MAP: dict[str, list[str]] = {
-    # RBB Departments
-    "Corporate": ["Corporate"],
-    "Operations": ["Operations"],
-    "Commercial": ["Commercial"],
-    "Technology": ["Technology"],
-    "Finance": ["Finance"],
-    "Human Resources": ["Human Resources", "HR", "Human Resource"],
-    "Legal & Compliance": ["Legal & Compliance", "Legal", "Compliance"],
-    "Strategy & Planning": ["Strategy & Planning", "Strategy", "Planning"],
-    
     # Digital Banking Departments
     "Internal Control": ["Internal Control", "Internal Audit", "Control"],
     
@@ -115,11 +94,9 @@ JD_DEPARTMENT_MAP: dict[str, list[str]] = {
         "Card Business",
     ],
 }
-
 # ─────────────────────────────────────────────────────────────────────────
 # JD UNIT MAPPING - Maps UI unit values to JD Unit field
 # ─────────────────────────────────────────────────────────────────────────
-
 JD_UNIT_MAP: dict[str, list[str]] = {
     # Internal Control
     "Internal Control": ["Internal Control"],
@@ -343,7 +320,7 @@ class QueryExtractor:
     # PUBLIC
     # ----------------------------------------------------------
 
-    def extract(self, query: str, bsc_k: int = 10) -> ExtractionResult:
+    def extract(self, query: str, bsc_k: int = 5) -> ExtractionResult:
         result = ExtractionResult()
 
         # Parse query fields
