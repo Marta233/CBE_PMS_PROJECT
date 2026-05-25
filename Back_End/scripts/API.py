@@ -408,3 +408,179 @@ def generate(req: GenerateRequest):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+
+
+# @app.post("/api/ingest")
+# def ingest_document(
+#     file:     UploadFile = File(...),
+#     doc_type: str        = Form(...),   # "BSC" | "JD" | "LOS"
+# ):
+#     """
+#     Accept a single uploaded file, parse it into chunks, embed, and add to FAISS.
+
+#     doc_type must be one of: BSC, JD, LOS
+#     Supported formats:
+#       BSC / LOS : .xlsx .xls .csv .pdf
+#       JD        : .pdf  .docx .doc .txt
+#     """
+#     import shutil, tempfile
+#     from pathlib import Path as _Path
+
+#     doc_type = doc_type.upper().strip()
+#     if doc_type not in ("BSC", "JD", "LOS"):
+#         raise HTTPException(status_code=400, detail=f"doc_type must be BSC, JD, or LOS. Got: {doc_type}")
+
+#     # 1. Save upload to a temp file
+#     suffix = _Path(file.filename).suffix.lower()
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+#         shutil.copyfileobj(file.file, tmp)
+#         tmp_path = _Path(tmp.name)
+
+#     log.info(f"[INGEST] Received file={file.filename!r}, doc_type={doc_type}, size={tmp_path.stat().st_size} bytes")
+
+#     try:
+#         # 2. Parse file into text chunks based on doc_type & format
+#         chunks = _parse_file(tmp_path, doc_type, file.filename)
+
+#         if not chunks:
+#             raise HTTPException(status_code=422, detail="File parsed but produced 0 chunks. Check file content.")
+
+#         # 3. Build Document objects with metadata
+#         from langchain_core.documents import Document as _Doc
+#         docs = [
+#             _Doc(
+#                 page_content=chunk["text"],
+#                 metadata={
+#                     "source":     doc_type,
+#                     "filename":   file.filename,
+#                     "division":   chunk.get("division", ""),
+#                     "department": chunk.get("department", ""),
+#                     "kpi":        chunk.get("kpi", ""),
+#                     "chunk_id":   i,
+#                 }
+#             )
+#             for i, chunk in enumerate(chunks)
+#         ]
+
+#         # 4. Add to the existing FAISS vector store (in-memory + disk)
+#         vector_store.add_documents(docs)
+#         log.info(f"[INGEST] Added {len(docs)} chunks from {file.filename!r} to FAISS")
+
+#         return {
+#             "filename":  file.filename,
+#             "doc_type":  doc_type,
+#             "chunks":    len(docs),
+#             "status":    "success",
+#             "detail":    f"Successfully indexed {len(docs)} chunks",
+#         }
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         log.error(f"[INGEST] Error processing {file.filename!r}: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+#     finally:
+#         tmp_path.unlink(missing_ok=True)
+
+
+# def _parse_file(path, doc_type: str, filename: str) -> list[dict]:
+#     """
+#     Parse uploaded file into list of {text, division?, department?, kpi?} dicts.
+#     Handles xlsx/csv for BSC & LOS, pdf/docx/txt for JD.
+#     """
+#     suffix = path.suffix.lower()
+#     chunks = []
+
+#     # ── EXCEL / CSV (BSC and LOS) ─────────────────────────────────────────────
+#     if suffix in (".xlsx", ".xls", ".csv"):
+#         try:
+#             import pandas as pd
+#             df = pd.read_csv(path) if suffix == ".csv" else pd.read_excel(path)
+#             df.columns = [str(c).strip() for c in df.columns]
+#             df = df.fillna("")
+#         except Exception as e:
+#             raise ValueError(f"Cannot read spreadsheet: {e}")
+
+#         for _, row in df.iterrows():
+#             text = "\n".join(f"{col}: {str(val).strip()}" for col, val in row.items() if str(val).strip())
+#             if text.strip():
+#                 chunk = {"text": text}
+#                 # try to extract common metadata columns
+#                 for col in df.columns:
+#                     cl = col.lower()
+#                     if   "division"   in cl: chunk["division"]   = str(row[col]).strip()
+#                     elif "department" in cl: chunk["department"] = str(row[col]).strip()
+#                     elif "kpi"        in cl: chunk["kpi"]        = str(row[col]).strip()
+#                 chunks.append(chunk)
+#         return chunks
+
+#     # ── PDF ───────────────────────────────────────────────────────────────────
+#     if suffix == ".pdf":
+#         try:
+#             import pdfplumber
+#             with pdfplumber.open(path) as pdf:
+#                 for page in pdf.pages:
+#                     text = (page.extract_text() or "").strip()
+#                     if text:
+#                         # split into ~500-char chunks
+#                         for i in range(0, len(text), 500):
+#                             segment = text[i:i+500].strip()
+#                             if segment:
+#                                 chunks.append({"text": segment})
+#         except ImportError:
+#             # fallback: pypdf
+#             try:
+#                 from pypdf import PdfReader
+#                 reader = PdfReader(str(path))
+#                 for page in reader.pages:
+#                     text = (page.extract_text() or "").strip()
+#                     for i in range(0, len(text), 500):
+#                         segment = text[i:i+500].strip()
+#                         if segment:
+#                             chunks.append({"text": segment})
+#             except Exception as e:
+#                 raise ValueError(f"Cannot read PDF: {e}")
+#         return chunks
+
+#     # ── DOCX ──────────────────────────────────────────────────────────────────
+#     if suffix in (".docx", ".doc"):
+#         try:
+#             from docx import Document as _DocxDoc
+#             doc = _DocxDoc(str(path))
+#             full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+#             for i in range(0, len(full_text), 500):
+#                 segment = full_text[i:i+500].strip()
+#                 if segment:
+#                     chunks.append({"text": segment})
+#         except Exception as e:
+#             raise ValueError(f"Cannot read DOCX: {e}")
+#         return chunks
+
+#     # ── TXT ───────────────────────────────────────────────────────────────────
+#     if suffix == ".txt":
+#         text = path.read_text(encoding="utf-8", errors="ignore").strip()
+#         for i in range(0, len(text), 500):
+#             segment = text[i:i+500].strip()
+#             if segment:
+#                 chunks.append({"text": segment})
+#         return chunks
+
+#     raise ValueError(f"Unsupported file type: {suffix}. Accepted: xlsx, xls, csv, pdf, docx, doc, txt")
+
+
+# # ── /api/rebuild-index ────────────────────────────────────────────────────────
+# @app.post("/api/rebuild-index")
+# def rebuild_index():
+#     """
+#     Save the current in-memory FAISS index to disk so the pipeline
+#     picks up newly ingested documents on the next generation call.
+#     """
+#     try:
+#         vector_store.save(str(BSC_FAISS_PATH))
+#         log.info("[REBUILD] FAISS index saved to disk")
+#         return {"status": "ok", "message": f"Index rebuilt and saved to {BSC_FAISS_PATH}"}
+#     except Exception as e:
+#         log.error(f"[REBUILD] Failed: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
