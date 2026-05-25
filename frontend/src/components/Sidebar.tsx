@@ -1,4 +1,4 @@
-import { LayoutDashboard, Target, ChartBar as BarChart2, Star, MessageSquareHeart, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Target, ChartBar as BarChart2, Star, MessageSquareHeart, ChevronRight, Database } from 'lucide-react';
 import type { PageKey } from '../types';
 
 interface NavItem {
@@ -9,11 +9,12 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { key: 'dashboard',  label: 'Dashboard',             icon: LayoutDashboard,    description: 'Overview & KPIs' },
-  { key: 'planning',   label: 'Performance Planning',  icon: Target,             description: 'Set & generate objectives' },
-  { key: 'tracking',   label: 'Data Tracking',         icon: BarChart2,          description: 'Monitor progress' },
-  { key: 'appraisal',  label: 'Performance Appraisal', icon: Star,               description: 'Reviews & ratings' },
-  { key: 'feedback',   label: 'Feedback & Coaching',   icon: MessageSquareHeart, description: 'Development & growth' },
+  { key: 'dashboard', label: 'Dashboard',            icon: LayoutDashboard,    description: 'Overview & KPIs'           },
+  { key: 'ingestion', label: 'Data Ingestion',        icon: Database,           description: 'Upload BSC, JD & LOS'      },
+  { key: 'planning',  label: 'Performance Planning',  icon: Target,             description: 'Set & generate objectives'  },
+  { key: 'tracking',  label: 'Data Tracking',         icon: BarChart2,          description: 'Monitor progress'           },
+  { key: 'appraisal', label: 'Performance Appraisal', icon: Star,               description: 'Reviews & ratings'          },
+  { key: 'feedback',  label: 'Feedback & Coaching',   icon: MessageSquareHeart, description: 'Development & growth'       },
 ];
 
 interface SidebarProps {
@@ -23,13 +24,11 @@ interface SidebarProps {
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   return (
-    /* CBE brand: deep blue sidebar */
     <aside className="w-64 min-h-screen flex flex-col flex-shrink-0" style={{ backgroundColor: '#5a1d5e' }}>
 
       {/* Brand */}
       <div className="px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div className="flex items-center gap-3">
-          {/* CBE official logo */}
           <img
             src="/cbe-logo.jpg"
             alt="Commercial Bank of Ethiopia"
@@ -91,7 +90,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         <div className="flex items-center gap-3 px-2">
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #892d8f, #6e2473)' }}
+            style={{ background: 'linear-gradient(135deg, #892d8f, #6e2473)' }}
           >
             AD
           </div>

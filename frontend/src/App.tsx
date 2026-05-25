@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
+import DataIngestion from './pages/DataIngestion';
 import PerformancePlanning from './pages/PerformancePlanning';
 import DataTracking from './pages/DataTracking';
 import PerformanceAppraisal from './pages/PerformanceAppraisal';
@@ -12,10 +13,11 @@ export default function App() {
 
   const pages: Record<PageKey, React.ReactElement> = {
     dashboard: <Dashboard />,
-    planning: <PerformancePlanning />,
-    tracking: <DataTracking />,
+    ingestion: <DataIngestion />,
+    planning:  <PerformancePlanning />,
+    tracking:  <DataTracking />,
     appraisal: <PerformanceAppraisal />,
-    feedback: <FeedbackCoaching />,
+    feedback:  <FeedbackCoaching />,
   };
 
   return (
