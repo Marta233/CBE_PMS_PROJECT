@@ -1,0 +1,388 @@
+{
+  "critical_target_objective": {
+    "objective": "Achieve team critical target",
+    "bsc_pillar": "Internal Process",
+    "kpi": "Team Critical Target Achievement Rate",
+    "measure": "Various",
+    "target": "50% of manager's target",
+    "weight_percent": 50,
+    "category": "Cannot Exceed",
+    "tracking_source": "System",
+    "time_frame": "Quarterly",
+    "note": "This objective is FIXED and must always be included as-is for every employee. Do not modify it."
+  },
+  "samples_by_unit": {
+    "Mobile Banking": {
+      "Senior Digital Banking Officer (JG-13)": [
+        {
+          "objective": "Initiate proposal & Analysis that increase non-interest income",
+          "bsc_pillar": "Financial",
+          "kpi": "Non-Interest Income Growth",
+          "measure": "Percentage",
+          "target": "As per against quarter action plan of 100%",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Prepare & review key documents for 3rd party integration projects",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Review Quality",
+          "measure": "Quality",
+          "target": "One round review with minor editing",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Prepare & review key documents for 3rd party integration projects (time)",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Delivery Timeliness",
+          "measure": "Time",
+          "target": "Quarterly as per the time stated on TOR",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Initiate and develop new/enhanced services & functionalities/E-commerce platform",
+          "bsc_pillar": "Customer",
+          "kpi": "New Features Delivered",
+          "measure": "Percentage",
+          "target": "As per against quarter action plan of 1 new feature",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Craft product knowledge and fraud mitigation mechanism catalogue",
+          "bsc_pillar": "Learning & Growth",
+          "kpi": "Catalogue Completion Rate",
+          "measure": "Various",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Increase Active MB user acquisition and transaction",
+          "bsc_pillar": "Customer",
+          "kpi": "Active Mobile Banking Users",
+          "measure": "Percentage",
+          "target": "As per quarter action plan of 100%",
+          "weight_percent": 20,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Conduct strategic initiatives, assessment document, performance analysis & standard requirements",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Strategic Initiative Quality",
+          "measure": "Quality",
+          "target": "One round review with minor editing",
+          "weight_percent": 3,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Conduct strategic initiatives, assessment document, performance analysis & standard requirements (time)",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Strategic Initiative Timeliness",
+          "measure": "Time",
+          "target": "Quarterly as per the time stated on TOR",
+          "weight_percent": 2,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        }
+      ],
+      "Digital Banking Officer (JG-12)": [
+        {
+          "objective": "Prepare proposals, BRD/performance evaluation document/assessments",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Quality",
+          "measure": "Quality",
+          "target": "One round review with minor editing",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Improve the productivity of integrated 3rd parties",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Active 3rd Party Operations",
+          "measure": "Percentage",
+          "target": "Increase active operation of 3rd parties >= 90%",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Increase Active MB user acquisition and transaction of Mobile banking user",
+          "bsc_pillar": "Customer",
+          "kpi": "Active MB User Count",
+          "measure": "Percentage",
+          "target": "As per action plan",
+          "weight_percent": 20,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Reduce inactive mobile banking list together with utilization of license and propose for removal",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Inactive User Rate",
+          "measure": "Percentage",
+          "target": "Inactive position user below 5%",
+          "weight_percent": 3,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Initiate, improve and develop both new & existing functionalities",
+          "bsc_pillar": "Customer",
+          "kpi": "Features Initiated",
+          "measure": "Number",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        }
+      ]
+    },
+    "Internet Banking": {
+      "Senior Digital Banking Officer (JG-13)": [
+        {
+          "objective": "Initiate proposal & Analysis that increase non-interest income",
+          "bsc_pillar": "Financial",
+          "kpi": "Non-Interest Income Growth",
+          "measure": "Percentage",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Prepare & review key documents for Corporate partners integration projects",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Review Quality",
+          "measure": "Quality",
+          "target": "One round review with minor editing",
+          "weight_percent": 3,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Initiate and develop new/enhanced services & functionalities",
+          "bsc_pillar": "Customer",
+          "kpi": "New Features Delivered",
+          "measure": "Number",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Craft product knowledge and fraud mitigation mechanism catalogue",
+          "bsc_pillar": "Learning & Growth",
+          "kpi": "Catalogue Completion Rate",
+          "measure": "Various",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Increase Active IB user acquisition and transaction",
+          "bsc_pillar": "Customer",
+          "kpi": "Active Internet Banking Users",
+          "measure": "Percentage",
+          "target": "As per action plan of 100%",
+          "weight_percent": 20,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Conduct strategic initiatives, assessment document, performance analysis & standard requirements",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Strategic Document Quality",
+          "measure": "Quality",
+          "target": "One round review with minor editing",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        }
+      ],
+      "Digital Banking Officer (JG-12)": [
+        {
+          "objective": "Improve the productivity of integrated corporate partners",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Active Partner Operations",
+          "measure": "Percentage",
+          "target": "Increase active operation of partners >= 90%",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Increase Active IB user acquisition",
+          "bsc_pillar": "Customer",
+          "kpi": "Active IB User Count",
+          "measure": "Percentage",
+          "target": "As per action plan of 100%",
+          "weight_percent": 20,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Follow inactive Internet banking list together with utilization of license and propose for removal",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Inactive IB User Rate",
+          "measure": "Percentage",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Initiate, improve and develop both new & existing IB functionalities",
+          "bsc_pillar": "Customer",
+          "kpi": "IB Features Initiated",
+          "measure": "Number",
+          "target": "As per action plan",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        }
+      ]
+    },
+    "ATM Operations": {
+      "Senior Digital Banking Officer (JG-13)": [
+        {
+          "objective": "Define and update all ATM terminals on the monitoring tool",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Terminal Update Rate",
+          "measure": "Percentage",
+          "target": "Define and update all terminals on the monitoring tool",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Evaluate ATM Maintenance Calls as per the SLA",
+          "bsc_pillar": "Internal Process",
+          "kpi": "ATM Maintenance Call Backlog",
+          "measure": "Percentage",
+          "target": "Zero backlog on ATM maintenance call evaluation",
+          "weight_percent": 15,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Monitor the proper functionality of ATM 24/7",
+          "bsc_pillar": "Internal Process",
+          "kpi": "ATM Uptime Rate",
+          "measure": "Percentage",
+          "target": "Increase uptime of ATM >= 85%",
+          "weight_percent": 20,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Conduct performance assessment, proposal, RFP, BRD and other pertinent documents",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Submission Timeliness",
+          "measure": "Time",
+          "target": "As per the time stated on TOR",
+          "weight_percent": 10,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        }
+      ]
+    },
+    "POS Merchant Management": {
+      "Senior Digital Banking Officer": [
+        {
+          "objective": "Follow up and support district POS Merchants and Corporate Merchants",
+          "bsc_pillar": "Customer",
+          "kpi": "Merchant Support Coverage",
+          "measure": "Percentage",
+          "target": "100% of action plan",
+          "weight_percent": 15,
+          "category": "Cannot Exceed",
+          "tracking_source": "System",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Submit performance reports on time (monthly)",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Report Submission Timeliness",
+          "measure": "Time",
+          "target": "Monthly on due date",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Monthly"
+        },
+        {
+          "objective": "Submit performance reports on time (quarterly)",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Quarterly Report Timeliness",
+          "measure": "Time",
+          "target": "Quarterly on due date",
+          "weight_percent": 5,
+          "category": "Cannot Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Increase Active POS Merchant count",
+          "bsc_pillar": "Financial",
+          "kpi": "Active POS Merchants",
+          "measure": "Percentage",
+          "target": "90% of action plan",
+          "weight_percent": 20,
+          "category": "Can Exceed",
+          "tracking_source": "System",
+          "time_frame": "Quarterly"
+        },
+        {
+          "objective": "Prepare proposals/analysis/BRD/performance evaluation/training documents on time",
+          "bsc_pillar": "Internal Process",
+          "kpi": "Document Submission Timeliness",
+          "measure": "Quality / Time",
+          "target": "Submitted on or before due date stated in TOR",
+          "weight_percent": 5,
+          "category": "Can Exceed",
+          "tracking_source": "Manual",
+          "time_frame": "Quarterly"
+        }
+      ]
+    }
+  }
+}

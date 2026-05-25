@@ -1,35 +1,12 @@
-.env
-__pycache__/
-*.pyc
-Data
-venv/
-
-
-# Python
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-dist/
-build/
-
-# Environment variables (never push API keys)
-.env
-*.env
-
-# FAISS indexes (large binary files)
-*_faiss_index/
-*.faiss
-*.pkl
-
-
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# IDE
+# Editor
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Logs
+*.log

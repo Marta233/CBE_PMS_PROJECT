@@ -228,22 +228,32 @@ def _build_extractor() -> QueryExtractor:
     return QueryExtractor(los_docs=los_docs, jd_docs=jd_docs, bsc_vectorstore=bsc_vs)
 
 
-extractor = _build_extractor()
+extractor = None   # initialised in startup event below
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FASTAPI APP
 # ══════════════════════════════════════════════════════════════════════════════
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global extractor
+    extractor = _build_extractor()   # runs AFTER middleware is registered
+    yield
+
 app = FastAPI(
     title="CBE PMS API",
     description="SMART performance objective generation for CBE employees.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -264,22 +274,27 @@ class Objective(BaseModel):
     objective:       str
     measure:         str
     target:          str
-    weight_percent:  int
+    weight_percent:  float
     category:        str
     tracking_source: str
     time_frame:      str
+    source:          str = Field(default="LLM Generated", description="Source of the objective (JD, BSC, LOS, Sample, LLM)")  # NEW
 
 
 class GenerateResponse(BaseModel):
     employee_profile: dict
     objectives:       list[Objective]
-    total_weight:     int
+    total_weight:     float
 
 
 # ── /api/generate ─────────────────────────────────────────────────────────────
 
 @app.post("/api/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
+
+    # ── Guard: extractor must be ready ──────────────────────────────────────
+    if extractor is None:
+        raise HTTPException(status_code=503, detail="Server is still initializing. Please retry in a few seconds.")
 
     # ── Request banner ────────────────────────────────────────────────────────
     _section("NEW REQUEST  —  /api/generate")
@@ -348,7 +363,7 @@ def generate(req: GenerateRequest):
         raise HTTPException(status_code=502, detail=f"Ollama error: {e}")
 
     # 5. Parse
-    raw = response["message"]["content"].strip()
+    raw = response.message.content.strip()          # ✅ ChatResponse is a Pydantic object — use attribute access
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -363,11 +378,12 @@ def generate(req: GenerateRequest):
             detail=f"LLM returned invalid JSON: {e}. Raw: {raw[:300]}",
         )
 
-    # Fix weight sum to remaining budget
-    # fix weight sum
-    llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
-    if llm_weight != 50 and llm_objectives:
-        llm_objectives[-1]["weight_percent"] += 50 - llm_weight
+    # Always normalize LLM weights to exactly 50% (critical target holds the other 50%)
+    if llm_objectives:
+        llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
+        llm_objectives[-1]["weight_percent"] = round(
+            llm_objectives[-1].get("weight_percent", 0) + (50 - llm_weight), 2
+        )
  
     # prepend fixed critical target
     all_objectives = [load_critical_target()] + llm_objectives
@@ -392,3 +408,179 @@ def generate(req: GenerateRequest):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+
+
+# @app.post("/api/ingest")
+# def ingest_document(
+#     file:     UploadFile = File(...),
+#     doc_type: str        = Form(...),   # "BSC" | "JD" | "LOS"
+# ):
+#     """
+#     Accept a single uploaded file, parse it into chunks, embed, and add to FAISS.
+
+#     doc_type must be one of: BSC, JD, LOS
+#     Supported formats:
+#       BSC / LOS : .xlsx .xls .csv .pdf
+#       JD        : .pdf  .docx .doc .txt
+#     """
+#     import shutil, tempfile
+#     from pathlib import Path as _Path
+
+#     doc_type = doc_type.upper().strip()
+#     if doc_type not in ("BSC", "JD", "LOS"):
+#         raise HTTPException(status_code=400, detail=f"doc_type must be BSC, JD, or LOS. Got: {doc_type}")
+
+#     # 1. Save upload to a temp file
+#     suffix = _Path(file.filename).suffix.lower()
+#     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+#         shutil.copyfileobj(file.file, tmp)
+#         tmp_path = _Path(tmp.name)
+
+#     log.info(f"[INGEST] Received file={file.filename!r}, doc_type={doc_type}, size={tmp_path.stat().st_size} bytes")
+
+#     try:
+#         # 2. Parse file into text chunks based on doc_type & format
+#         chunks = _parse_file(tmp_path, doc_type, file.filename)
+
+#         if not chunks:
+#             raise HTTPException(status_code=422, detail="File parsed but produced 0 chunks. Check file content.")
+
+#         # 3. Build Document objects with metadata
+#         from langchain_core.documents import Document as _Doc
+#         docs = [
+#             _Doc(
+#                 page_content=chunk["text"],
+#                 metadata={
+#                     "source":     doc_type,
+#                     "filename":   file.filename,
+#                     "division":   chunk.get("division", ""),
+#                     "department": chunk.get("department", ""),
+#                     "kpi":        chunk.get("kpi", ""),
+#                     "chunk_id":   i,
+#                 }
+#             )
+#             for i, chunk in enumerate(chunks)
+#         ]
+
+#         # 4. Add to the existing FAISS vector store (in-memory + disk)
+#         vector_store.add_documents(docs)
+#         log.info(f"[INGEST] Added {len(docs)} chunks from {file.filename!r} to FAISS")
+
+#         return {
+#             "filename":  file.filename,
+#             "doc_type":  doc_type,
+#             "chunks":    len(docs),
+#             "status":    "success",
+#             "detail":    f"Successfully indexed {len(docs)} chunks",
+#         }
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         log.error(f"[INGEST] Error processing {file.filename!r}: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+#     finally:
+#         tmp_path.unlink(missing_ok=True)
+
+
+# def _parse_file(path, doc_type: str, filename: str) -> list[dict]:
+#     """
+#     Parse uploaded file into list of {text, division?, department?, kpi?} dicts.
+#     Handles xlsx/csv for BSC & LOS, pdf/docx/txt for JD.
+#     """
+#     suffix = path.suffix.lower()
+#     chunks = []
+
+#     # ── EXCEL / CSV (BSC and LOS) ─────────────────────────────────────────────
+#     if suffix in (".xlsx", ".xls", ".csv"):
+#         try:
+#             import pandas as pd
+#             df = pd.read_csv(path) if suffix == ".csv" else pd.read_excel(path)
+#             df.columns = [str(c).strip() for c in df.columns]
+#             df = df.fillna("")
+#         except Exception as e:
+#             raise ValueError(f"Cannot read spreadsheet: {e}")
+
+#         for _, row in df.iterrows():
+#             text = "\n".join(f"{col}: {str(val).strip()}" for col, val in row.items() if str(val).strip())
+#             if text.strip():
+#                 chunk = {"text": text}
+#                 # try to extract common metadata columns
+#                 for col in df.columns:
+#                     cl = col.lower()
+#                     if   "division"   in cl: chunk["division"]   = str(row[col]).strip()
+#                     elif "department" in cl: chunk["department"] = str(row[col]).strip()
+#                     elif "kpi"        in cl: chunk["kpi"]        = str(row[col]).strip()
+#                 chunks.append(chunk)
+#         return chunks
+
+#     # ── PDF ───────────────────────────────────────────────────────────────────
+#     if suffix == ".pdf":
+#         try:
+#             import pdfplumber
+#             with pdfplumber.open(path) as pdf:
+#                 for page in pdf.pages:
+#                     text = (page.extract_text() or "").strip()
+#                     if text:
+#                         # split into ~500-char chunks
+#                         for i in range(0, len(text), 500):
+#                             segment = text[i:i+500].strip()
+#                             if segment:
+#                                 chunks.append({"text": segment})
+#         except ImportError:
+#             # fallback: pypdf
+#             try:
+#                 from pypdf import PdfReader
+#                 reader = PdfReader(str(path))
+#                 for page in reader.pages:
+#                     text = (page.extract_text() or "").strip()
+#                     for i in range(0, len(text), 500):
+#                         segment = text[i:i+500].strip()
+#                         if segment:
+#                             chunks.append({"text": segment})
+#             except Exception as e:
+#                 raise ValueError(f"Cannot read PDF: {e}")
+#         return chunks
+
+#     # ── DOCX ──────────────────────────────────────────────────────────────────
+#     if suffix in (".docx", ".doc"):
+#         try:
+#             from docx import Document as _DocxDoc
+#             doc = _DocxDoc(str(path))
+#             full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+#             for i in range(0, len(full_text), 500):
+#                 segment = full_text[i:i+500].strip()
+#                 if segment:
+#                     chunks.append({"text": segment})
+#         except Exception as e:
+#             raise ValueError(f"Cannot read DOCX: {e}")
+#         return chunks
+
+#     # ── TXT ───────────────────────────────────────────────────────────────────
+#     if suffix == ".txt":
+#         text = path.read_text(encoding="utf-8", errors="ignore").strip()
+#         for i in range(0, len(text), 500):
+#             segment = text[i:i+500].strip()
+#             if segment:
+#                 chunks.append({"text": segment})
+#         return chunks
+
+#     raise ValueError(f"Unsupported file type: {suffix}. Accepted: xlsx, xls, csv, pdf, docx, doc, txt")
+
+
+# # ── /api/rebuild-index ────────────────────────────────────────────────────────
+# @app.post("/api/rebuild-index")
+# def rebuild_index():
+#     """
+#     Save the current in-memory FAISS index to disk so the pipeline
+#     picks up newly ingested documents on the next generation call.
+#     """
+#     try:
+#         vector_store.save(str(BSC_FAISS_PATH))
+#         log.info("[REBUILD] FAISS index saved to disk")
+#         return {"status": "ok", "message": f"Index rebuilt and saved to {BSC_FAISS_PATH}"}
+#     except Exception as e:
+#         log.error(f"[REBUILD] Failed: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
