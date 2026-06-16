@@ -33,25 +33,25 @@ class PMSVectorStore:
     # LOAD DOCUMENTS
     # =========================================================
 
-    def load_json_documents(self, json_path: Path) -> List[Document]:
+    # def load_json_documents(self, json_path: Path) -> List[Document]:
 
-        logger.info(f"\n📂 Loading documents: {json_path.name}")
+    #     logger.info(f"\n📂 Loading documents: {json_path.name}")
 
-        with open(json_path, "r", encoding="utf-8") as f:
-            raw_docs = json.load(f)
+    #     with open(json_path, "r", encoding="utf-8") as f:
+    #         raw_docs = json.load(f)
 
-        documents = []
+    #     documents = []
 
-        for item in raw_docs:
-            documents.append(
-                Document(
-                    page_content=item["text"],
-                    metadata=item["metadata"]
-                )
-            )
+    #     for item in raw_docs:
+    #         documents.append(
+    #             Document(
+    #                 page_content=item["text"],
+    #                 metadata=item["metadata"]
+    #             )
+    #         )
 
-        logger.info(f"  ✅ Loaded {len(documents)} documents")
-        return documents
+    #     logger.info(f"  ✅ Loaded {len(documents)} documents")
+    #     return documents
 
     # =========================================================
     # CREATE VECTORSTORE

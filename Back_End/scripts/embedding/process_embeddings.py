@@ -7,16 +7,15 @@ import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from .config import (
+from config import (
     BSC_DOCUMENTS,
     LOS_DOCUMENTS,
     JD_DOCUMENTS,
     FAISS_INDEX_PATH,
     EMBEDDING_MODEL,
 )
-
-from .embedder import PMSVectorStore
-from .extractor import QueryExtractor, _get_meta, _get_text
+from embedder import PMSVectorStore
+from extractor import QueryExtractor, _get_meta, _get_text
 from langchain_core.documents import Document
 
 print("🚀 Starting pipeline...")
@@ -24,8 +23,6 @@ print("🚀 Starting pipeline...")
 # =========================================================
 # BUILD BSC-ONLY FAISS VECTORSTORE
 # =========================================================
-
-
 
 bsc_vectorstore = PMSVectorStore(
     embedding_model=EMBEDDING_MODEL,
@@ -49,6 +46,7 @@ else:
     bsc_vectorstore.create_vectorstore(bsc_lc_docs)
     bsc_vectorstore.save_vectorstore()
     print("   ✅ BSC FAISS index saved")
+    
 
 # =========================================================
 # INIT EXTRACTOR
@@ -66,12 +64,11 @@ extractor = QueryExtractor(
 
 query = """
 Division: Digital Banking
-Job Title:Digital Banking Officer
-Department:Mobile Money
-Unit:Mobile Money Business
-Job Grade:13
+Job Title:Senior Reconciliation and Settlement Officer
+Department:Merchant and Agent Reconciliation
+Unit:Merchant and Agent Reconciliation
+Job Grade:12
 """
-
 BSC_K = 10
 
 print(f"\n🔍 Query:\n{query}")
@@ -89,8 +86,9 @@ else:
     print("\n📄 JD Document: not found")
 
 print(f"\n📦 BSC Documents (top-{BSC_K} — query: unit + job title):")
-for i, doc in enumerate(result.bsc_docs, 1):
-    print(f"\n  [{i}] {_get_meta(doc)}")
+for i, (doc, score) in enumerate(zip(result.bsc_docs, result.bsc_scores), 1):
+    print(f"\n  [{i}] Score: {score:.4f}")
+    print(f"       {_get_meta(doc)}")
     print(f"       {_get_text(doc)}")
 
 print(f"\n📦 LOS Documents ({len(result.los_docs)}):")
