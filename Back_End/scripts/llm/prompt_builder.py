@@ -499,3 +499,35 @@ REQUIRED JSON OUTPUT FORMAT
   }}
 }}
 """
+
+
+def load_critical_target(job_title: str = "", job_grade: int | str = 13) -> dict:
+    """
+    Return the fixed 'critical target' objective object.
+
+    The API prepends this to the LLM-generated objectives.
+    """
+    try:
+        grade_int = int(job_grade)
+    except (TypeError, ValueError):
+        grade_int = 13
+
+    band = _resolve_grade_band(job_title or "", grade_int)
+    critical_wt = CRITICAL_TARGET_WEIGHT[band]
+
+    if band == "director":
+        role = "Division"
+    elif band == "unit_manager":
+        role = "Director's"
+    else:
+        role = "Manager's"
+
+    return {
+        "objective": "Achieve team critical target",
+        "measure": "Various",
+        "target": f"{critical_wt}% of {role} target",
+        "weight_percent": float(critical_wt),
+        "category": "Major Critical",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+    }

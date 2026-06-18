@@ -770,7 +770,7 @@ class QueryExtractor:
             penalty_query = None
 
         # ---------- FAISS similarity for main query ----------
-        raw_results = self.bsc_vectorstore.vectorstore.similarity_search_with_score(
+        raw_results = self.bsc_vectorstore.similarity_search_with_score(
             query_text, k=total
         )
         main_scores: dict[int, float] = {}
@@ -786,7 +786,7 @@ class QueryExtractor:
         # ---------- FAISS similarity for penalty query (if any) ----------
         penalty_scores: dict[int, float] = {}
         if penalty_query:
-            penalty_results = self.bsc_vectorstore.vectorstore.similarity_search_with_score(
+            penalty_results = self.bsc_vectorstore.similarity_search_with_score(
                 penalty_query, k=total
             )
             for doc, distance in penalty_results:

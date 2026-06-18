@@ -33,6 +33,15 @@ os.environ["HF_HUB_VERBOSITY"]       = "error"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger("pms")
 
+# Ensure unicode output doesn't crash in Windows consoles using cp1252.
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 import ollama
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -378,15 +387,24 @@ def generate(req: GenerateRequest):
             detail=f"LLM returned invalid JSON: {e}. Raw: {raw[:300]}",
         )
 
-    # Always normalize LLM weights to exactly 50% (critical target holds the other 50%)
+    # prepend fixed critical target (weight depends on grade band)
+    try:
+        job_grade_int = int(req.job_grade)
+    except (TypeError, ValueError):
+        job_grade_int = 13
+
+    critical_target = load_critical_target(job_title=req.job_title, job_grade=job_grade_int)
+    critical_wt = float(critical_target.get("weight_percent", 50))
+
+    # Normalize LLM weights to exactly (critical target weight complement),
+    # so weight sums remain consistent.
     if llm_objectives:
         llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
         llm_objectives[-1]["weight_percent"] = round(
-            llm_objectives[-1].get("weight_percent", 0) + (50 - llm_weight), 2
+            llm_objectives[-1].get("weight_percent", 0) + (critical_wt - llm_weight), 2
         )
- 
-    # prepend fixed critical target
-    all_objectives = [load_critical_target()] + llm_objectives
+
+    all_objectives = [critical_target] + llm_objectives
     total_weight   = sum(o.get("weight_percent", 0) for o in all_objectives)
 
     # ── Full terminal display of objectives ───────────────────────────────────

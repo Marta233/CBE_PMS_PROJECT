@@ -1,7 +1,10 @@
 # Back_End/api.py
-# Entry point so you can run:
-#   uvicorn Back_End.api:app --reload
+# Run from the Back_End folder:
+#   uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+#
+# Or from the project root:
+#   uvicorn Back_End.api:app --host 0.0.0.0 --port 8000 --reload
 #
 # All logic stays in Back_End/scripts/API.py
 
-from Back_End.scripts.API import app  # noqa: F401
+from scripts.API import app  # noqa: F401
