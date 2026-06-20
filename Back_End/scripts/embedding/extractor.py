@@ -14,7 +14,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional
-
+from langchain_community.vectorstores import FAISS
 from nltk.stem import PorterStemmer
 
 _stemmer = PorterStemmer()
@@ -66,12 +66,9 @@ LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
         "agent management", "pos merchant",
     ],
 }
-
-
 # ─────────────────────────────────────────────────────────────────────────
 # JD DEPARTMENT MAPPING - Maps UI department values to JD department field
 # ─────────────────────────────────────────────────────────────────────────
-
 JD_DEPARTMENT_MAP: dict[str, list[str]] = {
     # Digital Banking Departments
     "Internal Control": ["Internal Control", "Internal Audit", "Control"],
@@ -82,14 +79,12 @@ JD_DEPARTMENT_MAP: dict[str, list[str]] = {
         "Reconciliation and Dispute Management",
         "Reconciliation",
     ],
-    
     "Merchant and Agent Management": [
         "Merchant and Agent Management",
         "Merchant and Agent",
         "Merchant Management",
         "Agent Management",
     ],
-    
     # CRITICAL: Handle all variations of Mobile & Internet Banking
     "Mobile &Internet Banking": [
         "Mobile and Internet Banking",
@@ -238,8 +233,8 @@ PENALTY_MATCH : float = -0.60
 SEMANTIC_THRESHOLD: float = 0.5
 
 # Weight given to each FAISS query when combining
-QUERY_A_WEIGHT: float = 0.55   # unit-only query (primary)
-QUERY_B_WEIGHT: float = 0.45   # JD objectives query (enrichment)
+# QUERY_A_WEIGHT: float = 0.55   # unit-only query (primary)
+# QUERY_B_WEIGHT: float = 0.45   # JD objectives query (enrichment)
 
 UNIT_KEYWORD_SIGNAL: dict[str, dict[str, list[str]]] = {
     # ── Mobile Banking ──────────────────────────────────────────────────────
@@ -247,26 +242,26 @@ UNIT_KEYWORD_SIGNAL: dict[str, dict[str, list[str]]] = {
         "boost"   : ["mobile banking"],
         "penalise": ["card banking", "internet banking",
                      "cbe-birr", "agents", "agent ",
-                     "merchants", "atm", "pos "],
+                     "merchants", "atm", "pos"],
     },
     # ── Internet Banking ─────────────────────────────────────────────────────
     "internet banking": {
         "boost"   : ["internet banking"],
         "penalise": ["card banking", "mobile banking users",
                      "cbe-birr", "agents", "agent ",
-                     "merchants", "atm", "pos "],
+                     "merchants", "atm", "pos"],
     },
     # ── Mobile Money / CBE-Birr ───────────────────────────────────────────────
     # "mobile money" must NOT boost "mobile banking users" — they are different
     "mobile money": {
         "boost"   : ["cbe-birr"],
-        "penalise": ["card banking", "mobile banking users",
-                     "internet banking", "atm","agents", "agent ", "merchants", "CBE-Birr Merchants"],
+        "penalise": ["card banking", "mobile banking users","mobile banking",
+                     "internet banking", "atm","agents", "agent ", "merchants", "CBE-Birr Merchants","POS"],
     },
     "cbe-birr": {                         # alias for mobile money context
         "boost"   : ["cbe-birr"],
-        "penalise": ["card banking", "mobile banking users",
-                     "internet banking", "atm","agents", "agent ", "merchants","CBE-Birr Merchants"],
+        "penalise": ["card banking", "mobile banking users","mobile banking"
+                     "internet banking", "atm","agents", "agent ", "merchants","CBE-Birr Merchants","POS"],
     },
     # ── Card Banking ─────────────────────────────────────────────────────────
     "card banking": {
@@ -279,30 +274,25 @@ UNIT_KEYWORD_SIGNAL: dict[str, dict[str, list[str]]] = {
         "boost"   : ["atm"],
         "penalise": ["mobile banking", "internet banking",
                      "cbe-birr", "card banking users",
-                     "merchants", "pos "],
+                     "merchants"],
     },
     "atm": {
         "boost"   : ["atm"],
         "penalise": ["mobile banking", "internet banking",
                      "cbe-birr", "card banking users",
-                     "merchants", "pos "],
+                     "merchants"],
     },
     # ── Merchant Management ──────────────────────────────────────────────────
     "merchant management": {
         "boost"   : ["merchants", "cbe-birr merchants"],
-        "penalise": ["mobile banking users", "internet banking users",
-                     "card banking users", "atm down time",'CBE-Birr'],
-    },
-    "merchant": {
-        "boost"   : ["merchants", "cbe-birr merchants"],
-        "penalise": ["mobile banking users", "internet banking users",
-                     "card banking users", "atm down time",'CBE-Birr',"POS"],
+        "penalise": ["mobile banking users", "internet banking users","mobile Banking","ATM","Internet Banking","internate banking",
+                     "card banking users", "card","atm","POS", "agent"],
     },
     # ── Agent Management ─────────────────────────────────────────────────────
     "agent management": {
         "boost"   : ["agents", "agent ",'cbe-birr agents'],
-        "penalise": ["mobile banking users", "internet banking users",
-                     "card banking users", "atm", 'CBE-Birr',"POS"],
+        "penalise": ["mobile banking users", "internet banking users","mobile Banking","ATM","internate banking",
+                     "card banking users", "atm","POS"],
     },
     # ── Digital Partners ─────────────────────────────────────────────────────
     # "digital partners": {
@@ -311,12 +301,12 @@ UNIT_KEYWORD_SIGNAL: dict[str, dict[str, list[str]]] = {
     #                  "mobile banking users", "internet banking users",
     #                  "cbe-birr users"],
     # },
-    # # ── Card Production / Distribution ───────────────────────────────────────
-    # "card production": {
-    #     "boost"   : ["card banking"],
-    #     "penalise": ["mobile banking", "internet banking",
-    #                  "cbe-birr", "agents", "merchants"],
-    # },
+    # ── Card Production / Distribution ───────────────────────────────────────
+    "Card Production and Distribution": {
+        "boost"   : ["card banking"],
+        "penalise": ["mobile banking", "internet banking",
+                     "cbe-birr", "agents", "merchants"],
+    },
     # ── Reconciliation units — treat as shared, no penalise ──────────────────
     "reconciliation": {
         "boost"   : [],
@@ -349,8 +339,6 @@ def _parse_bsc_weight(doc_text: str) -> float:
         except ValueError:
             pass
     return 0.0
-
-
 def _extract_jd_objectives_from_text(text: str) -> str:
     """
     Extract Job Objective + Responsibilities from JD page_content.
@@ -517,13 +505,13 @@ class QueryExtractor:
 
     def extract(self, query: str, bsc_k: int = 10) -> ExtractionResult:
         result = ExtractionResult()
+        fields = self._parse_query_fields(query)
 
-        # Parse query fields
-        result.detected_division        = self._detect_division_keyword(query)
-        result.detected_department_name = self._detect_raw_field(query, "department")
-        result.detected_unit            = self._detect_raw_field(query, "unit")
-        result.detected_job_title       = self._detect_job_title(query)
-        result.detected_job_grade       = self._detect_raw_field(query, "job grade")
+        result.detected_division = fields.get("division")
+        result.detected_department_name = fields.get("department") or None
+        result.detected_unit = fields.get("unit")
+        result.detected_job_title = fields.get("job title")
+        result.detected_job_grade = fields.get("job grade")
         result.detected_department      = self._detect_los_department(
             query,
             raw_department=result.detected_department_name,
@@ -550,16 +538,16 @@ class QueryExtractor:
             job_grade=result.detected_job_grade,
         )
 
-        bsc_docs, bsc_scores = self._retrieve_bsc(
-        unit=result.detected_unit,
-        department=result.detected_department_name,
-        division=result.detected_division,
-        k=bsc_k,
-        jd_doc=result.jd_doc,
-    )
-        result.bsc_docs = bsc_docs
+        query_text, bsc_docs, bsc_scores = self._retrieve_bsc(
+            unit=result.detected_unit,
+            division=result.detected_division,
+            k=bsc_k,
+            jd_doc=result.jd_doc,
+        )
+        result.bsc_docs   = bsc_docs
         result.bsc_scores = bsc_scores
-        logger.info(f"  BSC docs: {len(result.bsc_docs)}")
+        result.query_text = query_text
+        logger.info(f"  BSC query_text: {query_text[:80]}...")
         logger.info(f"  BSC docs: {len(result.bsc_docs)}")
 
         logger.info(f"\n{result.summary}")
@@ -622,10 +610,43 @@ class QueryExtractor:
         return None
 
     def _detect_raw_field(self, query: str, field: str) -> Optional[str]:
-        m = re.search(rf"{field}\s*:\s*(.+)", query, re.IGNORECASE)
-        if m:
-            return re.sub(r"\s+", " ", m.group(1)).strip()
+        """
+        Extract a single field value from a multi-line query.
+
+        Example:
+            Department:
+            Unit: Merchant and Agent Reconciliation
+
+        Returns:
+            None for Department
+            Merchant and Agent Reconciliation for Unit
+        """
+
+        pattern = rf"^\s*{re.escape(field)}\s*:\s*(.*?)\s*$"
+
+        for line in query.splitlines():
+            m = re.match(pattern, line, re.IGNORECASE)
+            if m:
+                value = m.group(1).strip()
+                return value if value else None
+
         return None
+    def _parse_query_fields(self, query: str):
+
+        fields = {}
+
+        for line in query.splitlines():
+
+            line = line.strip()
+
+            if ":" not in line:
+                continue
+
+            key, value = line.split(":", 1)
+
+            fields[key.strip().lower()] = value.strip()
+
+        return fields
 
     def _detect_job_title(self, query: str) -> Optional[str]:
         for pattern in [
@@ -702,163 +723,111 @@ class QueryExtractor:
     # BSC RETRIEVAL (HYBRID WITH JD OBJECTIVES + DIVISION FILTER)
     # ----------------------------------------------------------
 
-    def _retrieve_bsc(self,
-                  unit: Optional[str],
-                  department: Optional[str],
-                  division: Optional[str],
-                  k: int,
-                  jd_doc: Optional[object] = None) -> tuple[List, List[float]]:
-        if self.bsc_vectorstore is None or self.bsc_vectorstore.vectorstore is None:
-            return [], []
-
+    def _retrieve_bsc(
+        self,
+        unit: Optional[str],
+        division: Optional[str],
+        k: int,
+        jd_doc: Optional[object] = None,
+    ):
         if not self._all_bsc_docs:
             self._load_all_bsc_docs()
-        if not self._all_bsc_docs:
-            return [], []
 
-        # Division filter
+        # ── Step 1: Filter by division ────────────────────────────────
         if division:
             div_norm = _normalize(division)
-            division_docs = [doc for doc in self._all_bsc_docs
-                            if _normalize(_get_meta(doc).get("division", "")) == div_norm]
-            if division_docs:
-                logger.info(f"  BSC division='{division}' → {len(division_docs)} docs")
-            else:
-                logger.warning(f"  BSC division='{division}' matched nothing → using all")
-                division_docs = self._all_bsc_docs
+            division_docs = [
+                doc for doc in self._all_bsc_docs
+                if _normalize(_get_meta(doc).get("division", "")) == div_norm
+            ]
         else:
             division_docs = self._all_bsc_docs
-            logger.info("  BSC no division filter")
 
         if not division_docs:
-            return [], []
+            logger.warning("  BSC: no docs found for division")
+            return "", [], []
 
-        total = len(division_docs)
-        prefix_idx = {_get_text(doc)[:120]: i for i, doc in enumerate(division_docs)}
+        logger.info(f"  BSC: {len(division_docs)} docs after division filter")
 
-        # Get signal for this unit
-        signal = _get_unit_signal(unit or "")
-        boost_terms = signal.get("boost", [])
-        penalise_terms = signal.get("penalise", [])
+        # ── Step 2: Build query — unit name + synonyms + JD objectives ─
+        query_a = unit.strip() if unit else ""
 
-        # ---------- Build main query (original + boost terms) ----------
-        query_parts = []
-        if unit:
-            expanded_unit = self._expand_unit_synonyms(unit)
-            query_parts.append(expanded_unit)
-        if jd_doc is not None:
-            jd_text = _extract_jd_objectives_from_text(_get_text(jd_doc))
-            if jd_text:
-                jd_text = self._expand_unit_synonyms(jd_text) if unit else jd_text
-                query_parts.append(jd_text)
-        if not query_parts:
-            query_text = "digital banking"
-        else:
-            query_text = " ".join(query_parts)
+        # Expand unit with synonyms so FAISS can bridge label mismatches
+        # e.g. query has "CBE-Birr" but BSC doc says "Mobile Money"
+        if query_a:
+            unit_norm = _normalize(query_a)
+            synonym_expansions = []
+            for key, syns in UNIT_SYNONYMS.items():
+                if key in unit_norm:
+                    synonym_expansions.extend(syns)
+            if synonym_expansions:
+                query_a = query_a + " " + " ".join(synonym_expansions)
+                logger.info(f"  BSC query expanded with synonyms: {query_a}")
 
-        # Add boost terms with strong repetition (5x for more weight)
-        for term in boost_terms:
-            query_text += f" {term} {term} {term} {term} {term}"
+        query_b = ""
+        if jd_doc:
+            query_b = _extract_jd_objectives_from_text(_get_text(jd_doc))
 
-        logger.info(f"  BSC main query (boost included): '{query_text[:200]}...'")
+        query_text = " ".join(filter(None, [query_a, query_b]))
 
-        # ---------- Build penalty query (only penalise terms) ----------
-        if penalise_terms:
-            penalty_query = " ".join([f"{term} {term}" for term in penalise_terms])
-            logger.info(f"  BSC penalty query (to subtract): '{penalty_query[:150]}...'")
-        else:
-            penalty_query = None
+        if not query_text.strip():
+            logger.warning("  BSC: empty query — returning first k docs")
+            return "", division_docs[:k], [0.0] * min(k, len(division_docs))
 
-        # ---------- FAISS similarity for main query ----------
-        raw_results = self.bsc_vectorstore.vectorstore.similarity_search_with_score(
-            query_text, k=total
+        logger.info(f"  BSC query ({len(query_text)} chars): {query_text[:120]}...")
+
+        # ── Step 3: Build temp FAISS index for this division only ─────
+        temp_vs = FAISS.from_documents(
+            division_docs,
+            self.bsc_vectorstore.embeddings
         )
-        main_scores: dict[int, float] = {}
-        for doc, distance in raw_results:
-            sim = 1.0 / (1.0 + distance)
-            idx = prefix_idx.get(_get_text(doc)[:120])
-            if idx is not None:
-                main_scores[idx] = sim
 
-        if not main_scores:
-            return [], []
+        # ── Step 4: Pure semantic search across ALL division docs ─────
+        # Fetch all docs so re-ranking can freely re-order the full set.
+        # normalize_embeddings=True → FAISS returns L2 distance on unit
+        # vectors.  Convert: cosine_sim = 1 - L2² / 2
+        fetch_k = len(division_docs)
+        raw_results = temp_vs.similarity_search_with_score(query_text, k=fetch_k)
 
-        # ---------- FAISS similarity for penalty query (if any) ----------
-        penalty_scores: dict[int, float] = {}
-        if penalty_query:
-            penalty_results = self.bsc_vectorstore.vectorstore.similarity_search_with_score(
-                penalty_query, k=total
-            )
-            for doc, distance in penalty_results:
-                sim = 1.0 / (1.0 + distance)
-                idx = prefix_idx.get(_get_text(doc)[:120])
-                if idx is not None:
-                    penalty_scores[idx] = sim
+        semantic: list[tuple] = []
+        for doc, l2_dist in raw_results:
+            cosine_sim = max(0.0, 1.0 - (l2_dist ** 2) / 2.0)
+            semantic.append((doc, cosine_sim))
 
-        # ---------- Combine scores with both direct and semantic penalty ----------
-        ALPHA = 0.7                     # Weight for semantic penalty (FAISS similarity to penalise terms)
-        BOOST_BONUS = 0.25              # Extra reward for documents containing any boost term
-        SCORE_THRESHOLD = 0.35
+        if semantic:
+            logger.info(f"  BSC semantic top={semantic[0][1]:.4f}  bottom={semantic[-1][1]:.4f}")
 
-        # Use the global BOOST_MATCH and PENALTY_MATCH constants (defined earlier)
-        global BOOST_MATCH, PENALTY_MATCH   # (or just refer to them; they are in module scope)
-        # But to avoid confusion, we'll just use the values: BOOST_MATCH = 0.40, PENALTY_MATCH = -0.60
+        # ── Step 5: Re-rank with UNIT_KEYWORD_SIGNAL (penalty only) ──
+        # Cosine score is the base. PENALTY_MATCH (-0.60) pushes down
+        # KPIs that belong to a different channel (e.g. "card banking"
+        # docs when the unit is "Mobile Money"). One penalty max per doc.
+        signal         = _get_unit_signal(unit or "")
+        penalise_terms = [t.lower() for t in signal.get("penalise", [])]
 
-        combined_scores: dict[int, float] = {}
-        for idx, main_sim in main_scores.items():
-            doc = division_docs[idx]
-            kpi_name = _get_meta(doc).get("kpi", "").lower()
-            penalty_sim = penalty_scores.get(idx, 0.0)
+        reranked: list[tuple] = []
+        for doc, cosine_score in semantic:
+            kpi_text = _get_text(doc).lower()
+            final    = cosine_score
 
-            # 1. Weight bonus (from BSC document weight)
-            weight_bonus = 0.03 * _parse_bsc_weight(_get_text(doc))
-
-            # 2. Direct keyword‑based boost (BOOST_MATCH per matching boost term)
-            direct_boost = 0.0
-            for term in boost_terms:
-                if term.lower() in kpi_name:
-                    direct_boost += BOOST_MATCH   # +0.40 each
-
-            # 3. Direct keyword‑based penalty (PENALTY_MATCH per matching penalise term, but only once)
-            direct_penalty = 0.0
+            penalised = False
             for term in penalise_terms:
-                if term.lower() in kpi_name:
-                    direct_penalty = PENALTY_MATCH   # -0.60 (only one penalty)
-                    break
+                if term in kpi_text and not penalised:
+                    final += PENALTY_MATCH
+                    penalised = True
+                    logger.debug(f"    ↓ penalise '{term}' → {final:.4f}")
 
-            # 4. Semantic penalty (from FAISS similarity to penalise query)
-            semantic_penalty = ALPHA * penalty_sim
+            reranked.append((doc, final))
 
-            # 5. Boost bonus (extra +0.25 if any boost term found – already covered by direct_boost?
-            #    But we keep it separate for historical reasons; can be removed or kept.)
-            boost_bonus = 0.0
-            for term in boost_terms:
-                if term.lower() in kpi_name:
-                    boost_bonus = BOOST_BONUS
-                    break
+        # Sort descending by final score, take top-k
+        reranked.sort(key=lambda x: -x[1])
+        top_k = reranked[:k]
 
-            final_score = main_sim + direct_boost + direct_penalty + weight_bonus + boost_bonus - semantic_penalty
-            combined_scores[idx] = final_score
+        docs   = [d for d, _ in top_k]
+        scores = [s for _, s in top_k]
 
-        # Apply threshold
-        filtered_scores = {idx: score for idx, score in combined_scores.items() if score > SCORE_THRESHOLD}
-
-        if not filtered_scores:
-            logger.info(f"  BSC: No document scored above {SCORE_THRESHOLD}")
-            return [], []
-
-        ranked = sorted(filtered_scores.items(), key=lambda x: -x[1])[:k]
-        docs = [division_docs[idx] for idx, _ in ranked]
-        scores = [score for _, score in ranked]
-
-        logger.info(f"\n  BSC hybrid results (main + direct_boost/penalty + weight + boost_bonus - {ALPHA}*penalty_sim, threshold>{SCORE_THRESHOLD}):")
-        for idx, sc in ranked:
-            main_sim = main_scores.get(idx, 0.0)
-            penalty_sim = penalty_scores.get(idx, 0.0)
-            kpi = _get_meta(division_docs[idx]).get("kpi", "?")
-            logger.info(f"    [{sc:.4f}] (main={main_sim:.3f} - {ALPHA}*{penalty_sim:.3f} + direct)  kpi='{kpi}'")
-
-        return docs, scores
+        if scores:
+            logger.info(f"  BSC reranked: top={scores[0]:.4f}  bottom={scores[-1]:.4f}")
+        return query_text, docs, scores
 
     # ----------------------------------------------------------
     # KEYWORD FALLBACK FOR BSC
@@ -978,8 +947,6 @@ class QueryExtractor:
 
         return False
 
-
-
     def _match_jd_flexible(
         self,
         division: Optional[str],
@@ -988,88 +955,44 @@ class QueryExtractor:
         job_title: Optional[str],
         job_grade: Optional[str] = None,
     ):
-
         if not self.jd_docs:
             logger.warning(" No JD documents available")
             return None
 
-
-        q_division = _normalize(division)
-        q_department = _normalize(department)
-        q_unit = _normalize(unit)
-        q_job_title = _normalize(job_title)
-
+        q_division = _normalize(division) if division else None
+        q_department = _normalize(department) if department else None
+        q_unit = _normalize(unit) if unit else None
+        q_job_title = _normalize(job_title) if job_title else None
 
         logger.info("\n JD Match Search")
-        logger.info(
-            f"Division={division}, "
-            f"Department={department}, "
-            f"Unit={unit}, "
-            f"Title={job_title}"
-        )
-
+        logger.info(f"Division={division}, Department={department}, Unit={unit}, Title={job_title}")
 
         for doc in self.jd_docs:
-
             text = _get_text(doc)
+            jd_division = _normalize(_extract_jd_division(text))
+            jd_department = _normalize(_extract_jd_department(text))
+            jd_unit = _normalize(_extract_jd_unit(text))
+            jd_job_title = _normalize(_extract_jd_job_title(text))
 
-            jd_division = _normalize(
-                _extract_jd_division(text)
-            )
-
-            jd_department = _normalize(
-                _extract_jd_department(text)
-            )
-
-            jd_unit = _normalize(
-                _extract_jd_unit(text)
-            )
-
-            jd_job_title = _normalize(
-                _extract_jd_job_title(text)
-            )
-
-
-            # --------------------------
-            # Division EXACT MATCH
-            # --------------------------
-            if jd_division != q_division:
+            # Division: only check if query has a value
+            if q_division is not None and jd_division != q_division:
                 continue
 
-
-            # --------------------------
-            # Unit EXACT MATCH
-            # --------------------------
-            if jd_unit != q_unit:
+            # Unit: only check if query has a value
+            if q_unit is not None and jd_unit != q_unit:
                 continue
 
-
-            # --------------------------
-            # Job Title EXACT MATCH
-            # --------------------------
-            if jd_job_title != q_job_title:
+            # Job Title: only check if query has a value
+            if q_job_title is not None and jd_job_title != q_job_title:
                 continue
 
+            # Department: flexible match, but only if query has a value
+            if q_department is not None:
+                if not self._department_match(q_department, jd_department):
+                    continue
 
-            # --------------------------
-            # Department FLEXIBLE MATCH
-            # --------------------------
-            if not self._department_match(
-                q_department,
-                jd_department
-            ):
-                continue
-
-
-            logger.info(
-                "✓ JD MATCH FOUND"
-            )
-
+            logger.info("✓ JD MATCH FOUND")
             return doc
 
-
-        logger.info(
-            "✗ No JD match found"
-        )
-
+        logger.info("✗ No JD match found")
         return None

@@ -7,15 +7,15 @@ import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from config import (
+from .config import (
     BSC_DOCUMENTS,
     LOS_DOCUMENTS,
     JD_DOCUMENTS,
     FAISS_INDEX_PATH,
     EMBEDDING_MODEL,
 )
-from embedder import PMSVectorStore
-from extractor import QueryExtractor, _get_meta, _get_text
+from .embedder import PMSVectorStore
+from .extractor import QueryExtractor, _get_meta, _get_text
 from langchain_core.documents import Document
 
 print("🚀 Starting pipeline...")
@@ -64,10 +64,10 @@ extractor = QueryExtractor(
 
 query = """
 Division: Digital Banking
-Job Title:Senior Reconciliation and Settlement Officer
-Department:Merchant and Agent Reconciliation
+Job Title: Banking Operation Officer
+Department:
 Unit:Merchant and Agent Reconciliation
-Job Grade:12
+Job Grade:9
 """
 BSC_K = 10
 
@@ -120,7 +120,6 @@ retrieved_context = {
     "bsc_context": bsc_context,
     "los_context": los_context,
 }
-
 save_path = Path(__file__).resolve().parent.parent.parent / "Data" / "processed" / "retrieved_context.json"
 save_path.parent.mkdir(parents=True, exist_ok=True)
 

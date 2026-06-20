@@ -8,7 +8,6 @@ from pathlib import Path
 # PATHS
 # =========================================================
 
-# prepare_all_embeddings.py
 import sys
 from pathlib import Path
 
@@ -24,10 +23,10 @@ print('BSC Data successfully processed. Shape:', bsc_df.shape)
 los_df, los_docs = run_los_pipeline()
 print('LOS Data successfully processed. Shape:', los_df.shape)
 
-
 VECTORSTORE_PATH = Path("Back_End/Data/vectorstore")
 
 VECTORSTORE_PATH.mkdir(parents=True, exist_ok=True)
+
 
 
 # =========================================================
@@ -52,4 +51,5 @@ FAISS_INDEX_PATH = (
 # EMBEDDING MODEL
 # =========================================================
 
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
