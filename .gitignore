@@ -1,12 +1,16 @@
+Data/
+vectorstore
 # OS
 .DS_Store
 Thumbs.db
-
+s
 # Editor
 .vscode/
 .idea/
+
 *.swp
 *.swo
 
 # Logs
 *.log
+
