@@ -1,55 +1,17 @@
-# embedding_config.py
-"""Embedding + FAISS configuration"""
-
+"""
+embedding/config.py
+Paths and model settings only.
+Data is loaded from knowledge_base.json — no pipeline re-runs.
+"""
 from pathlib import Path
 
+PROJECT_ROOT     = Path(__file__).resolve().parents[3]
+DATA_ROOT        = PROJECT_ROOT / "Back_End" / "Data"
 
-# =========================================================
-# PATHS
-# =========================================================
-
-import sys
-from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-from scripts.Data_Ingestion.BSC_Data.bsc_main import run_bsc_pipeline
-from scripts.Data_Ingestion.LOS_Data.LOS_main import run_los_pipeline
-from scripts.Data_Ingestion.JD_Data.jd_main import run_pipeline   # JD pipeline
-
-jd_df, jd_docs = run_pipeline()
-print('JD Data successfully processed. Shape:', jd_df.shape)
-bsc_df, bsc_docs = run_bsc_pipeline()
-print('BSC Data successfully processed. Shape:', bsc_df.shape)
-los_df, los_docs = run_los_pipeline()
-print('LOS Data successfully processed. Shape:', los_df.shape)
-
-VECTORSTORE_PATH = Path("Back_End/Data/vectorstore")
+KNOWLEDGE_BASE_FILE = DATA_ROOT / "documents" / "knowledge_base.json"
+VECTORSTORE_PATH    = DATA_ROOT / "vectorstore"
+FAISS_INDEX_PATH    = VECTORSTORE_PATH / "bsc_faiss_index"
 
 VECTORSTORE_PATH.mkdir(parents=True, exist_ok=True)
 
-
-
-# =========================================================
-# INPUT FILES
-# =========================================================
-
-BSC_DOCUMENTS = bsc_docs
-
-LOS_DOCUMENTS = los_docs
-
-JD_DOCUMENTS = jd_docs
-
-# =========================================================
-# FAISS OUTPUT
-# =========================================================
-
-FAISS_INDEX_PATH = (
-    VECTORSTORE_PATH / "bsc_faiss_index"
-)
-
-# =========================================================
-# EMBEDDING MODEL
-# =========================================================
-
-# EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
