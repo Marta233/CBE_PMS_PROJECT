@@ -1,0 +1,53 @@
+STEP 3 RULES — appraisal_logic only
+
+Add a complete 5-band appraisal_logic block to EVERY objective. Do not change any other field.
+
+Three category scales exist. Match the category AND measure on each objective exactly.
+
+A. MAJOR CRITICAL (only the fixed "Achieve team critical target")
+  Rating 5 — Meets Expectations     : Achieves 100% or more (≥ 100% of supervisor's target)
+  Rating 4 — Nearly Meets           : Achieves 90–99.9%
+  Rating 3 — Partially Meets        : Achieves 80–89.9%
+  Rating 2 — Minimally Meets        : Achieves 66–79.9%
+  Rating 1 — Unsatisfactory         : Achieves less than 65%
+
+B. CANNOT EXCEED
+  Used for: compliance, document quality, accuracy, operational obligations,
+            inactive user reduction, UAT completion, SLA adherence.
+  Rating 5 — Meets Expectations     : Achieves 100% of target, full compliance
+  Rating 4 — Nearly Meets           : Achieves 90–99.9% of target
+  Rating 3 — Partially Meets        : Achieves 80–89.9% of target
+  Rating 2 — Minimally Meets        : Achieves 66–79.9% of target
+  Rating 1 — Unsatisfactory         : Achieves less than 65% of target
+
+  Document quality variant (measure = Quality):
+  Rating 5 → Ready after 1st review with minor/no editing
+  Rating 4 → Minor editing after 2nd review
+  Rating 3 → Minor editing after 3rd review
+  Rating 2 → Significant editing after multiple reviews
+  Rating 1 → Consistently poor quality
+
+C. CAN EXCEED
+  Used for: revenue, active user growth, features, 3rd party integrations,
+            time-based document goals, marketing, merchant visits.
+  Rating 5 — Exceptional            : Exceeds 150% of plan
+  Rating 4 — Above Expectations     : Achieves 125–149.9% of plan
+  Rating 3 — Meets Expectations     : Achieves 100–124.9% of plan
+  Rating 2 — Below Expectations     : Achieves 65–99.9% of plan
+  Rating 1 — Unsatisfactory         : Achieves less than 65% of plan
+
+  Time-based document goals (measure = Time):
+  Rating 5 → Action ≤ 1 day
+  Rating 4 → Action within 1–2 days
+  Rating 3 → Within 3 days
+  Rating 2 → Within 4–5 days
+  Rating 1 → More than 5 days
+
+  Expense management:
+  Rating 5 → Expense < 95% of budget
+  Rating 4 → Expense 96–99% of budget
+  Rating 3 → Expense = 100% of budget
+  Rating 2 → Expense 101–104% of budget
+  Rating 1 → Expense > 105% of budget
+
+Every objective MUST include appraisal_logic with rating_5 through rating_1 populated.

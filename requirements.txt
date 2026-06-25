@@ -5,10 +5,12 @@ langchain-community
 ollama
 python-dotenv
 openpyxl
-faiss-cpu 
+faiss-cpu
 sentence-transformers
 langchain
 langchain-huggingface
-sentence-transformers
-faiss-cpu
-uvicorn 
+uvicorn
+celery[redis]
+redis
+httpx
+nltk

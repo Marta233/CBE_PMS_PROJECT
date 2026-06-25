@@ -16,8 +16,17 @@ import json
 import logging
 import os
 import sys
+import threading
 import warnings
 from pathlib import Path
+
+# ── path setup (must run before scripts.* / llm.* imports) ───────────────────
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+_PROJECT_ROOT = _SCRIPTS_DIR.parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(_PROJECT_ROOT))
 
 # ── silence noisy third-party loggers ────────────────────────────────────────
 logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
@@ -42,20 +51,40 @@ try:
 except Exception:
     pass
 
-import ollama
-from fastapi import FastAPI, HTTPException
+from llm.pipeline import generate_objectives as run_objective_pipeline, get_prompt_preview
+from llm.llm_client import check_llm_available, LLMUnavailableError, LLMTimeoutError, probe_llm_health
+from llm.sanitize import sanitize_user_field
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
-# ── path setup ────────────────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-
-from config import FAISS_INDEX_PATH, EMBEDDING_MODEL, LOS_DATA_PATH, JD_DATA_PATH, BSC_Data_PATH
-from embedding.embedder  import PMSVectorStore
+from config import (
+    FAISS_INDEX_PATH,
+    FAISS_DIVISION_INDEX_DIR,
+    EMBEDDING_MODEL,
+    LOS_DATA_PATH,
+    JD_DATA_PATH,
+    BSC_Data_PATH,
+    USE_ASYNC_QUEUE,
+    RETRIEVAL_CACHE_TTL,
+    JOB_RESULT_TTL,
+    LLM_BACKEND,
+)
+from embedding.embedder import PMSVectorStore
+from embedding.division_indexes import DivisionIndexManager
 from embedding.extractor import QueryExtractor, _get_text, _get_meta
-from llm.prompt_builder  import build_prompt, load_critical_target
+from cache.retrieval_cache import redis_available, cache_stats as retrieval_cache_stats
+from cache.generation_cache import cache_stats as step1_cache_stats
+from jobs.job_store import (
+    create_job,
+    get_job,
+    JobStatus,
+    mark_running,
+    mark_completed,
+    mark_failed,
+    update_job,
+)
 
 BSC_FAISS_PATH = Path(FAISS_INDEX_PATH)
 
@@ -90,6 +119,33 @@ def _doc_preview(doc, index: int, max_chars: int = 600):
     text = _get_text(doc)
     print(f"\n    [{index}]  metadata : {json.dumps(meta, ensure_ascii=False)}")
     print(f"         text     : {text[:max_chars]}{'...' if len(text) > max_chars else ''}")
+
+def _build_retrieval_incomplete_detail(job_title: str, result) -> dict:
+    """Build a 422 payload when required retrieval sources are missing."""
+    failed: list[str] = []
+    messages: list[str] = []
+
+    if result.jd_doc is None:
+        failed.append("job_description")
+        messages.append(
+            f'"{job_title}" does not have a job description in the system. '
+            "Please reach out to the PMS team to resolve this issue."
+        )
+
+    if len(result.bsc_docs) == 0:
+        failed.append("bsc")
+        messages.append(
+            "No Balanced Scorecard (BSC) documents were found for your division/department. "
+            "Please reach out to the PMS team to resolve this issue."
+        )
+
+    return {
+        "error": "retrieval_incomplete",
+        "failed": failed,
+        "message": " ".join(messages),
+        "job_title": job_title,
+    }
+
 
 def _display_retrieved(result, jd_context, bsc_context, los_context):
     """
@@ -155,12 +211,19 @@ def _display_retrieved(result, jd_context, bsc_context, los_context):
     _bar()
 
 
-def _display_prompt_summary(prompt: str, num_remaining: int):
-    _section("STEP 3 OF 4  —  PROMPT  (what is sent to the LLM)")
-    _kv("Prompt length",       f"{len(prompt):,} chars")
-    _kv("Objectives requested", f"{num_remaining}  (LLM generates these; critical target prepended separately)")
-    _kv("LLM model",           "llama3  via Ollama")
-    _kv("Temperature",         "0.3  (low = consistent structured output)")
+def _display_prompt_summary(preview: dict, num_remaining: int):
+    _section("STEP 3 OF 4  —  PROMPTS  (3-step modular pipeline — all values model-generated)")
+    chars = preview.get("prompt_chars") if isinstance(preview.get("prompt_chars"), dict) else {}
+    _kv("Step 1 (draft)",       f"{len(preview.get('step1_user', '')):,} chars")
+    _kv("Step 2 (metrics)",     f"{len(preview.get('step2_user', '')):,} chars")
+    _kv("Step 3 (appraisal)",   f"{len(preview.get('step3_user', '')):,} chars")
+    if chars:
+        _kv("Step 1 (ran)",     f"{chars.get('step1', 0):,} chars")
+        _kv("Step 2 (ran)",     f"{chars.get('step2', 0):,} chars")
+        _kv("Step 3 (ran)",     f"{chars.get('step3', 0):,} chars")
+    _kv("Drafts requested",     preview.get("num_drafts", str(num_remaining)))
+    _kv("Remaining weight",     f"{preview.get('remaining_weight', '?')}%  (rules in prompt; model assigns)")
+    _kv("LLM model",            f"{LLM_BACKEND}  × 3 calls")
     _blank()
     _bar()
 
@@ -175,6 +238,8 @@ def _display_llm_result(all_objectives: list, total_weight: int):
         _kv("Target",         obj.get("target", ""),         indent=12)
         _kv("Weight",         f"{obj.get('weight_percent', '')}%  |  {obj.get('category', '')}",  indent=12)
         _kv("Tracking",       f"{obj.get('tracking_source', '')}  |  {obj.get('time_frame', '')}",indent=12)
+        if obj.get("appraisal_logic"):
+            _kv("Appraisal 5",  obj["appraisal_logic"].get("rating_5", "")[:80], indent=12)
         _blank()
     _thin()
     status = "✅" if total_weight == 100 else "⚠️ "
@@ -225,6 +290,20 @@ def _build_extractor() -> QueryExtractor:
         bsc_vs.create_vectorstore(bsc_lc)
         bsc_vs.save_vectorstore()
 
+    print("\n  [4/4]  Pre-warming division FAISS sub-indexes ...")
+    all_bsc_lc = [
+        Document(page_content=d["text"], metadata=d.get("metadata", {}))
+        if isinstance(d, dict) else d
+        for d in bsc_raw
+    ]
+    division_indexes = DivisionIndexManager(
+        bsc_vs.embeddings,
+        FAISS_DIVISION_INDEX_DIR,
+    )
+    division_indexes.build_or_load(all_bsc_lc)
+    for div in division_indexes.divisions:
+        _kv(f"  {div}", f"{len(division_indexes.get_division_docs(div))} docs indexed")
+
     _blank()
     _bar("═")
     print("  ✅  API ready")
@@ -234,7 +313,12 @@ def _build_extractor() -> QueryExtractor:
     _bar("═")
     _blank()
 
-    return QueryExtractor(los_docs=los_docs, jd_docs=jd_docs, bsc_vectorstore=bsc_vs)
+    return QueryExtractor(
+        los_docs=los_docs,
+        jd_docs=jd_docs,
+        bsc_vectorstore=bsc_vs,
+        division_indexes=division_indexes,
+    )
 
 
 extractor = None   # initialised in startup event below
@@ -277,6 +361,22 @@ class GenerateRequest(BaseModel):
     job_title:      str = Field(..., example="Senior Digital Banking Officer")
     job_grade:      str = Field(..., example="13")
     num_objectives: int = Field(default=5, ge=2, le=10)
+    employee_id:    str | None = Field(
+        default=None,
+        description="Optional HR employee ID for deterministic regeneration",
+    )
+    fiscal_year:    int | None = Field(
+        default=None,
+        description="Performance planning fiscal year (defaults to current calendar year)",
+    )
+
+
+class AppraisalLogic(BaseModel):
+    rating_5: str
+    rating_4: str
+    rating_3: str
+    rating_2: str
+    rating_1: str
 
 
 class Objective(BaseModel):
@@ -287,46 +387,118 @@ class Objective(BaseModel):
     category:        str
     tracking_source: str
     time_frame:      str
-    source:          str = Field(default="LLM Generated", description="Source of the objective (JD, BSC, LOS, Sample, LLM)")  # NEW
+    source:          str = Field(default="LLM Generated", description="Source of the objective")
+    bsc_kpi:         str | None = None
+    bsc_strategic_objective: str | None = None
+    los_alignment:   str | None = None
+    appraisal_logic: AppraisalLogic | None = None
 
 
 class GenerateResponse(BaseModel):
     employee_profile: dict
     objectives:       list[Objective]
     total_weight:     float
+    pipeline_meta:    dict | None = None
 
 
-# ── /api/generate ─────────────────────────────────────────────────────────────
+class JobAcceptedResponse(BaseModel):
+    job_id: str
+    status: str = "queued"
+    poll_url: str
+    message: str = "Generation queued. Poll poll_url until status is completed."
 
-@app.post("/api/generate", response_model=GenerateResponse)
-def generate(req: GenerateRequest):
 
-    # ── Guard: extractor must be ready ──────────────────────────────────────
-    if extractor is None:
-        raise HTTPException(status_code=503, detail="Server is still initializing. Please retry in a few seconds.")
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    result: GenerateResponse | None = None
+    partial_result: GenerateResponse | None = None
+    progress: dict | None = None
+    error: str | None = None
+    detail: dict | None = None
 
-    # ── Request banner ────────────────────────────────────────────────────────
-    _section("NEW REQUEST  —  /api/generate")
-    _subsection("STEP 1 OF 4  —  INPUT  (received from UI form)")
-    _kv("Division",       req.division)
-    _kv("Department",     req.department)
-    _kv("Unit",           req.unit)
-    _kv("Job Title",      req.job_title)
-    _kv("Job Grade",      req.job_grade)
-    _kv("Num Objectives", str(req.num_objectives))
-    _blank()
-    _bar()
 
-    # 1. Build query string
-    query = (
-        f"Division: {req.division}\n"
-        f"Department: {req.department}\n"
-        f"Unit: {req.unit}\n"
-        f"Job Title: {req.job_title}\n"
-        f"Job Grade: {req.job_grade}"
+def _async_queue_enabled() -> bool:
+    return USE_ASYNC_QUEUE
+
+
+def _run_generation_background(job_id: str, context: dict, num_objectives: int) -> None:
+    """Local background fallback when Redis/Celery are unavailable."""
+    mark_running(job_id)
+    try:
+        def _on_progress(update: dict) -> None:
+            update_job(
+                job_id,
+                status=JobStatus.RUNNING.value,
+                progress={
+                    "stage": update.get("stage"),
+                    "message": update.get("message"),
+                },
+                partial_result=update.get("partial_result"),
+            )
+
+        result = run_objective_pipeline(
+            context,
+            num_objectives,
+            progress_callback=_on_progress,
+        )
+        mark_completed(job_id, result)
+    except LLMTimeoutError as exc:
+        mark_failed(job_id, str(exc), detail={"error": "llm_timeout"})
+    except LLMUnavailableError as exc:
+        mark_failed(job_id, str(exc), detail={"error": "llm_unavailable"})
+    except json.JSONDecodeError as exc:
+        mark_failed(
+            job_id,
+            f"LLM returned invalid JSON after retries: {exc}",
+            detail={"error": "invalid_json"},
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        try:
+            parsed = json.loads(detail)
+            if isinstance(parsed, dict):
+                mark_failed(job_id, "Validation failed", detail=parsed)
+                return
+        except json.JSONDecodeError:
+            pass
+        mark_failed(job_id, detail)
+    except Exception as exc:
+        mark_failed(job_id, f"Pipeline error: {exc}")
+
+
+def _build_query(req: GenerateRequest) -> str:
+    division = sanitize_user_field(req.division)
+    department = sanitize_user_field(req.department)
+    unit = sanitize_user_field(req.unit)
+    job_title = sanitize_user_field(req.job_title)
+    job_grade = sanitize_user_field(req.job_grade)
+    return (
+        f"Division: {division}\n"
+        f"Department: {department}\n"
+        f"Unit: {unit}\n"
+        f"Job Title: {job_title}\n"
+        f"Job Grade: {job_grade}"
     )
 
-    # 2. Extraction
+
+def _build_context(req: GenerateRequest, query: str, payload: dict) -> dict:
+    jd_context, bsc_context, los_context = _contexts_from_payload(payload)
+    context = {
+        "query": query,
+        "jd_context": jd_context,
+        "bsc_context": bsc_context,
+        "los_context": los_context,
+    }
+    if req.employee_id:
+        context["employee_id"] = sanitize_user_field(req.employee_id)
+    if req.fiscal_year is not None:
+        context["fiscal_year"] = req.fiscal_year
+    return context
+
+
+def _run_retrieval(req: GenerateRequest, query: str):
+    """Run FAISS/JD extraction. Returns (result, contexts, cache_hit)."""
     print(f"\n  Running extraction ...")
     try:
         result = extractor.extract(query, bsc_k=5)
@@ -337,95 +509,250 @@ def generate(req: GenerateRequest):
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
 
-    # ── Full terminal display of retrieved context ────────────────────────────
-    _display_retrieved(result, jd_context, bsc_context, los_context)
-
-    context = {
-        "query":       query,
-        "jd_context":  jd_context,
+    payload = {
+        "query": query,
+        "jd_context": jd_context,
         "bsc_context": bsc_context,
         "los_context": los_context,
+        "jd_found": result.jd_doc is not None,
+        "bsc_count": len(result.bsc_docs),
+        "los_count": len(result.los_docs),
+        "detected_division": result.detected_division,
+        "detected_department_name": result.detected_department_name,
+        "detected_department": result.detected_department,
+        "detected_unit": result.detected_unit,
+        "detected_job_title": result.detected_job_title,
+        "detected_job_grade": result.detected_job_grade,
     }
+    return result, payload, False
 
-    # 3. Build prompt
-    prompt = build_prompt(context, req.num_objectives)
-    _display_prompt_summary(prompt, req.num_objectives - 1)
 
-    # 4. Call Ollama
-    print(f"\n  Calling llama3 via Ollama ...")
+def _contexts_from_payload(payload: dict) -> tuple[str, str, str]:
+    return (
+        payload.get("jd_context", ""),
+        payload.get("bsc_context", ""),
+        payload.get("los_context", ""),
+    )
+
+
+def _run_pipeline_sync(context: dict, num_objectives: int) -> dict:
     try:
-        response = ollama.chat(
-            model="llama3",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a PMS expert for Commercial Bank of Ethiopia. "
-                        "Output ONLY valid JSON. No markdown, no explanation."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            options={"temperature": 0.3, "top_p": 0.9},
+        return run_objective_pipeline(context, num_objectives)
+    except LLMTimeoutError as e:
+        raise HTTPException(
+            status_code=504,
+            detail={"error": "llm_timeout", "message": str(e)},
         )
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ollama error: {e}")
-
-    # 5. Parse
-    raw = response.message.content.strip()          # ✅ ChatResponse is a Pydantic object — use attribute access
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    try:
-        llm_objectives = json.loads(raw).get("objectives", [])
+    except LLMUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "llm_unavailable", "message": str(e)},
+        )
     except json.JSONDecodeError as e:
         raise HTTPException(
             status_code=502,
-            detail=f"LLM returned invalid JSON: {e}. Raw: {raw[:300]}",
+            detail={
+                "error": "invalid_json",
+                "message": f"LLM returned invalid JSON after retries: {e}",
+            },
         )
+    except ValueError as e:
+        detail = str(e)
+        try:
+            parsed = json.loads(detail)
+            if isinstance(parsed, dict) and "validation_errors" in parsed:
+                raise HTTPException(status_code=502, detail=parsed)
+        except json.JSONDecodeError:
+            pass
+        raise HTTPException(status_code=502, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Pipeline error: {e}")
 
-    # prepend fixed critical target (weight depends on grade band)
-    try:
-        job_grade_int = int(req.job_grade)
-    except (TypeError, ValueError):
-        job_grade_int = 13
 
-    critical_target = load_critical_target(job_title=req.job_title, job_grade=job_grade_int)
-    critical_wt = float(critical_target.get("weight_percent", 50))
-
-    # Normalize LLM weights to exactly (critical target weight complement),
-    # so weight sums remain consistent.
-    if llm_objectives:
-        llm_weight = sum(o.get("weight_percent", 0) for o in llm_objectives)
-        llm_objectives[-1]["weight_percent"] = round(
-            llm_objectives[-1].get("weight_percent", 0) + (critical_wt - llm_weight), 2
-        )
-
-    all_objectives = [critical_target] + llm_objectives
-    total_weight   = sum(o.get("weight_percent", 0) for o in all_objectives)
-
-    # ── Full terminal display of objectives ───────────────────────────────────
-    _display_llm_result(all_objectives, total_weight)
-
+def _build_generate_response(result_data: dict) -> GenerateResponse:
     return GenerateResponse(
-        employee_profile={
-            "division":   req.division,
-            "department": req.department,
-            "unit":       req.unit,
-            "job_title":  req.job_title,
-            "job_grade":  req.job_grade,
-        },
-        objectives=all_objectives,
-        total_weight=total_weight,
+        employee_profile=result_data["employee_profile"],
+        objectives=result_data["objectives"],
+        total_weight=result_data["total_weight"],
+        pipeline_meta=result_data.get("pipeline_meta"),
     )
+
+
+# ── /api/generate ─────────────────────────────────────────────────────────────
+
+@app.post("/api/generate")
+def generate(req: GenerateRequest, response: Response):
+
+    if extractor is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "server_initializing",
+                "message": "Server is still initializing. Please retry in a few seconds.",
+            },
+        )
+
+    job_title = sanitize_user_field(req.job_title)
+
+    _section("NEW REQUEST  —  /api/generate")
+    _subsection("STEP 1 OF 4  —  INPUT  (received from UI form)")
+    _kv("Division",       req.division)
+    _kv("Department",     req.department)
+    _kv("Unit",           req.unit)
+    _kv("Job Title",      req.job_title)
+    _kv("Job Grade",      req.job_grade)
+    _kv("Num Objectives", str(req.num_objectives))
+    _kv("Async queue",    "enabled" if _async_queue_enabled() else "sync fallback")
+    _blank()
+    _bar()
+
+    query = _build_query(req)
+    result, payload, cache_hit = _run_retrieval(req, query)
+
+    if not cache_hit:
+        jd_context, bsc_context, los_context = _contexts_from_payload(payload)
+        _display_retrieved(result, jd_context, bsc_context, los_context)
+
+    if not payload.get("jd_found"):
+        print(
+            f'\n  ⚠️  No job description found for "{job_title}" — '
+            "continuing without JD context"
+        )
+
+    if int(payload.get("bsc_count", 0)) == 0:
+        detail = _build_retrieval_incomplete_detail(job_title, result)
+        print(f"\n  ❌  Retrieval incomplete — blocked generation: {detail['failed']}")
+        raise HTTPException(status_code=422, detail=detail)
+
+    jd_context, bsc_context, los_context = _contexts_from_payload(payload)
+    if not bsc_context.strip():
+        detail = _build_retrieval_incomplete_detail(job_title, result)
+        detail["message"] = (
+            "No Balanced Scorecard (BSC) context was retrieved. "
+            "Please reach out to the PMS team to resolve this issue."
+        )
+        print(f"\n  ❌  Retrieval empty — blocked generation")
+        raise HTTPException(status_code=422, detail=detail)
+
+    try:
+        check_llm_available()
+    except LLMUnavailableError as e:
+        print(f"\n  ❌  LLM unavailable: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "llm_unavailable", "message": str(e)},
+        )
+
+    context = _build_context(req, query, payload)
+    preview = get_prompt_preview(context, req.num_objectives)
+    _display_prompt_summary(preview, req.num_objectives - 1)
+
+    if _async_queue_enabled():
+        job_id = create_job(ttl=JOB_RESULT_TTL)
+        if redis_available():
+            from tasks.generation_tasks import run_generation
+
+            run_generation.delay(job_id, context, req.num_objectives)
+            print(f"\n  Queued generation job {job_id} (Celery)")
+        else:
+            thread = threading.Thread(
+                target=_run_generation_background,
+                args=(job_id, context, req.num_objectives),
+                daemon=True,
+            )
+            thread.start()
+            print(f"\n  Queued generation job {job_id} (local background)")
+        response.status_code = 202
+        return JobAcceptedResponse(
+            job_id=job_id,
+            poll_url=f"/api/jobs/{job_id}",
+        )
+
+    print(f"\n  Running 3-step pipeline (draft → metrics → appraisal) ...")
+    result_data = _run_pipeline_sync(context, req.num_objectives)
+
+    for warning in result_data.get("pipeline_meta", {}).get("warnings", []):
+        print(f"  ⚠️  {warning}")
+
+    meta = result_data.get("pipeline_meta", {})
+    if meta.get("step1_cache_hit"):
+        print("  Step 1 cache HIT — skipped draft LLM call")
+    if meta.get("seed") is not None:
+        print(
+            f"  🔒  Deterministic seed: {meta['seed']} "
+            f"(employee_id={meta.get('employee_id')}, "
+            f"fiscal_year={meta.get('fiscal_year')}, "
+            f"prompt_version={meta.get('prompt_version')})"
+        )
+
+    _display_llm_result(result_data["objectives"], result_data["total_weight"])
+
+    try:
+        return _build_generate_response(result_data)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "Response validation failed", "error": str(e)},
+        )
+
+
+@app.get("/api/jobs/{job_id}", response_model=JobStatusResponse)
+def get_generation_job(job_id: str):
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "job_not_found", "message": "Job not found."},
+        )
+
+    status = job.get("status", JobStatus.QUEUED.value)
+    out = JobStatusResponse(job_id=job_id, status=status)
+
+    if status == JobStatus.COMPLETED.value and job.get("result"):
+        try:
+            out.result = _build_generate_response(job["result"])
+        except Exception as e:
+            out.status = JobStatus.FAILED.value
+            out.error = f"Response validation failed: {e}"
+
+    if job.get("partial_result"):
+        try:
+            out.partial_result = _build_generate_response(job["partial_result"])
+        except Exception:
+            out.partial_result = None
+
+    if isinstance(job.get("progress"), dict):
+        out.progress = job.get("progress")
+
+    if status == JobStatus.FAILED.value:
+        out.error = job.get("error")
+        out.detail = job.get("detail")
+
+    return out
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    llm = probe_llm_health()
+
+    return {
+        "status": "ok" if extractor is not None else "initializing",
+        "extractor_ready": extractor is not None,
+        "llm_available": llm["available"],
+        "llm_message": llm["message"],
+        "llm_backend": llm["backend"],
+        "llm_model": llm["model"],
+        "llm_reachable": llm["reachable"],
+        "llm_model_loaded": llm["model_loaded"],
+        "llm_request_timeout_seconds": llm["request_timeout_seconds"],
+        "llm_health_timeout_seconds": llm["health_timeout_seconds"],
+        "llm_max_concurrent_requests": llm["max_concurrent_requests"],
+        "async_queue_enabled": _async_queue_enabled(),
+        "redis_available": redis_available(),
+        "retrieval_cache_ttl_seconds": RETRIEVAL_CACHE_TTL,
+        "retrieval_cache": retrieval_cache_stats(),
+        "step1_cache": step1_cache_stats(),
+    }
 
 
 

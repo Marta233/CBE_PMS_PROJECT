@@ -6,7 +6,7 @@
     "measure": "Various",
     "target": "50% of manager's target",
     "weight_percent": 50,
-    "category": "Cannot Exceed",
+    "category": "Major Critical",
     "tracking_source": "System",
     "time_frame": "Quarterly",
     "note": "This objective is FIXED and must always be included as-is for every employee. Do not modify it."

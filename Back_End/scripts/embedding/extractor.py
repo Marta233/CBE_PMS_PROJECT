@@ -494,11 +494,13 @@ class ExtractionResult:
 
 class QueryExtractor:
 
-    def __init__(self, los_docs, jd_docs, bsc_vectorstore):
+    def __init__(self, los_docs, jd_docs, bsc_vectorstore, division_indexes=None):
         self.los_docs        = list(los_docs)
         self.jd_docs         = list(jd_docs)
         self.bsc_vectorstore = bsc_vectorstore
+        self.division_indexes = division_indexes
         self._all_bsc_docs: Optional[List] = None
+        self._bge_query_prefix = getattr(bsc_vectorstore, "_bge_query_prefix", "")
 
     def _load_all_bsc_docs(self) -> List:
         if self._all_bsc_docs is None:
@@ -665,35 +667,37 @@ class QueryExtractor:
         """Get all possible variants for a department name."""
         if not department:
             return set()
-        
+
         dept_norm = _normalize(department)
         variants = {dept_norm}
-        
-        # Check mapping
+
         for jd_dept, ui_list in JD_DEPARTMENT_MAP.items():
-            for ui_val in ui_list:
-                if _normalize(ui_val) == dept_norm:
-                    variants.add(_normalize(jd_dept))
-                    break
-        
+            all_names = {_normalize(jd_dept)} | {_normalize(u) for u in ui_list}
+            if dept_norm in all_names:
+                variants.update(all_names)
+
         return variants
 
     def _get_unit_variants(self, unit: Optional[str]) -> set:
         """Get all possible variants for a unit name."""
         if not unit:
             return set()
-        
+
         unit_norm = _normalize(unit)
         variants = {unit_norm}
-        
-        # Check mapping
+
         for jd_unit, ui_list in JD_UNIT_MAP.items():
-            for ui_val in ui_list:
-                if _normalize(ui_val) == unit_norm:
-                    variants.add(_normalize(jd_unit))
-                    break
-        
+            all_names = {_normalize(jd_unit)} | {_normalize(u) for u in ui_list}
+            if unit_norm in all_names:
+                variants.update(all_names)
+
         return variants
+
+    def _get_title_variants(self, job_title: Optional[str]) -> set:
+        """Get normalized variants for a job title (extensible for future title maps)."""
+        if not job_title:
+            return set()
+        return {_normalize(job_title)}
 
     # ----------------------------------------------------------
     # BSC RETRIEVAL
@@ -711,30 +715,40 @@ class QueryExtractor:
         if self.bsc_vectorstore is None or self.bsc_vectorstore.vectorstore is None:
             return [], []
 
-        if not self._all_bsc_docs:
-            self._load_all_bsc_docs()
-        if not self._all_bsc_docs:
-            return [], []
-
-        # Division filter
-        if division:
-            div_norm = _normalize(division)
-            division_docs = [doc for doc in self._all_bsc_docs
-                            if _normalize(_get_meta(doc).get("division", "")) == div_norm]
+        # Prefer pre-built division sub-index (avoids global FAISS scan)
+        if division and self.division_indexes is not None:
+            division_docs = self.division_indexes.get_division_docs(division)
             if division_docs:
-                logger.info(f"  BSC division='{division}' → {len(division_docs)} docs")
+                logger.info(
+                    f"  BSC division='{division}' → {len(division_docs)} docs (sub-index)"
+                )
             else:
-                logger.warning(f"  BSC division='{division}' matched nothing → using all")
-                division_docs = self._all_bsc_docs
+                division_docs = []
         else:
-            division_docs = self._all_bsc_docs
-            logger.info("  BSC no division filter")
+            if not self._all_bsc_docs:
+                self._load_all_bsc_docs()
+            if not self._all_bsc_docs:
+                return [], []
+
+            # Division filter (legacy global index path)
+            if division:
+                div_norm = _normalize(division)
+                division_docs = [doc for doc in self._all_bsc_docs
+                                if _normalize(_get_meta(doc).get("division", "")) == div_norm]
+                if division_docs:
+                    logger.info(f"  BSC division='{division}' → {len(division_docs)} docs")
+                else:
+                    logger.warning(f"  BSC division='{division}' matched nothing → using all")
+                    division_docs = self._all_bsc_docs
+            else:
+                division_docs = self._all_bsc_docs
+                logger.info("  BSC no division filter")
 
         if not division_docs:
             return [], []
 
         total = len(division_docs)
-        prefix_idx = {_get_text(doc)[:120]: i for i, doc in enumerate(division_docs)}
+        prefix_idx = {hash(_get_text(doc)): i for i, doc in enumerate(division_docs)}
 
         # Get signal for this unit
         signal = _get_unit_signal(unit or "")
@@ -770,13 +784,23 @@ class QueryExtractor:
             penalty_query = None
 
         # ---------- FAISS similarity for main query ----------
-        raw_results = self.bsc_vectorstore.similarity_search_with_score(
-            query_text, k=total
+        use_sub_index = (
+            self.division_indexes is not None
+            and division
+            and self.division_indexes.get_store(division) is not None
         )
+        if use_sub_index:
+            raw_results = self.division_indexes.similarity_search_with_score(
+                division, query_text, k=total, query_prefix=self._bge_query_prefix,
+            )
+        else:
+            raw_results = self.bsc_vectorstore.similarity_search_with_score(
+                query_text, k=total
+            )
         main_scores: dict[int, float] = {}
         for doc, distance in raw_results:
             sim = 1.0 / (1.0 + distance)
-            idx = prefix_idx.get(_get_text(doc)[:120])
+            idx = prefix_idx.get(hash(_get_text(doc)))
             if idx is not None:
                 main_scores[idx] = sim
 
@@ -786,12 +810,17 @@ class QueryExtractor:
         # ---------- FAISS similarity for penalty query (if any) ----------
         penalty_scores: dict[int, float] = {}
         if penalty_query:
-            penalty_results = self.bsc_vectorstore.similarity_search_with_score(
-                penalty_query, k=total
-            )
+            if use_sub_index:
+                penalty_results = self.division_indexes.similarity_search_with_score(
+                    division, penalty_query, k=total, query_prefix=self._bge_query_prefix,
+                )
+            else:
+                penalty_results = self.bsc_vectorstore.similarity_search_with_score(
+                    penalty_query, k=total
+                )
             for doc, distance in penalty_results:
                 sim = 1.0 / (1.0 + distance)
-                idx = prefix_idx.get(_get_text(doc)[:120])
+                idx = prefix_idx.get(hash(_get_text(doc)))
                 if idx is not None:
                     penalty_scores[idx] = sim
 
@@ -957,6 +986,9 @@ class QueryExtractor:
         query_department = _normalize(query_department)
         jd_department = _normalize(jd_department)
 
+        if self._get_department_variants(query_department) & self._get_department_variants(jd_department):
+            return True
+
         # exact match
         if query_department == jd_department:
             return True
@@ -996,8 +1028,6 @@ class QueryExtractor:
 
         q_division = _normalize(division)
         q_department = _normalize(department)
-        q_unit = _normalize(unit)
-        q_job_title = _normalize(job_title)
 
 
         logger.info("\n JD Match Search")
@@ -1021,13 +1051,9 @@ class QueryExtractor:
                 _extract_jd_department(text)
             )
 
-            jd_unit = _normalize(
-                _extract_jd_unit(text)
-            )
+            jd_unit_raw = _extract_jd_unit(text)
 
-            jd_job_title = _normalize(
-                _extract_jd_job_title(text)
-            )
+            jd_job_title_raw = _extract_jd_job_title(text)
 
 
             # --------------------------
@@ -1038,16 +1064,16 @@ class QueryExtractor:
 
 
             # --------------------------
-            # Unit EXACT MATCH
+            # Unit VARIANT MATCH (JD_UNIT_MAP)
             # --------------------------
-            if jd_unit != q_unit:
+            if not (self._get_unit_variants(unit) & self._get_unit_variants(jd_unit_raw)):
                 continue
 
 
             # --------------------------
-            # Job Title EXACT MATCH
+            # Job Title VARIANT MATCH
             # --------------------------
-            if jd_job_title != q_job_title:
+            if not (self._get_title_variants(job_title) & self._get_title_variants(jd_job_title_raw)):
                 continue
 
 

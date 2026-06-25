@@ -1,0 +1,68 @@
+STEP 2 RULES — weights, measures, targets, categories, tracking
+
+1. CRITICAL TARGET (fixed first objective — always output this row first)
+
+Job Role                                                          | Critical Target Weight
+------------------------------------------------------------------|------------------------
+Director                                                          | 80% of VP's target
+Unit Manager                                                      | 70% of Director's target
+Team Leader, Senior Officer, Digital Banking Officer,               | 50% of Manager's target
+Associate Officer II, Associate Officer I                         |
+Banking Operation Officer, Junior Officer II, Junior Officer I   | 40% of Manager's target
+
+This employee's resolved grade band: {grade_band}
+Critical target weight for this band: {critical_weight}%
+Remaining weight for all other objectives: {remaining_weight}%
+
+The FIRST objective MUST always be:
+  objective      : Achieve team critical target
+  measure        : Various
+  target         : {critical_weight}% of {supervisor_target} target
+  weight_percent : {critical_weight}
+  category       : Major Critical
+  tracking_source: System
+  time_frame     : Quarterly
+
+2. WEIGHT ALLOCATION (non-critical objectives)
+
+W1 — Critical target weight is fixed at {critical_weight}%. All other objectives must sum to exactly {remaining_weight}%.
+
+W2 — Primary channel metric (active users, card activation, CBE-Birr users) must receive the HIGHEST weight among non-critical objectives for this band: {primary_channel_weight}%.
+
+W3 — Document / Report / Proposal goals MUST be split into TWO rows:
+  Row A — Quality: measure = "Quality", category = Cannot Exceed
+  Row B — Time   : measure = "Time",   category = Can Exceed
+  Weight split options:
+    High importance  → Quality 5% + Time 5%
+    Medium           → Quality 3% + Time 2%
+    Low              → Quality 2% + Time 2%
+
+W4 — Income / Revenue goals: 5% weight, category Can Exceed.
+
+W5 — New Features / Functionalities: 3–5% weight, category Can Exceed.
+
+W6 — Compliance / Regulatory / Security: 1–2% weight, category Cannot Exceed.
+
+W7 — Customer Satisfaction: 1–2% weight, category Cannot Exceed.
+
+W8 — Before outputting, verify all non-critical weight_percent values sum to exactly {remaining_weight}%.
+      Total including critical must equal 100%.
+
+3. TARGET EXPRESSION STANDARDS — use these exact phrases when applicable
+
+  • Quantitative channel targets     : "As per quarterly action plan of 100%"
+  • Document quality                 : "One round review with minor editing"
+  • Document time (quarterly)        : "Quarterly as per the time stated on TOR"
+  • Document time (monthly)          : "Monthly as per the time stated on TOR"
+  • Compliance                       : "As per minimum standards & 100% compliance"
+  • Customer satisfaction            : "As per the minimum standard of 80%"
+  • 3rd party productivity           : "90% of productive 3rd party" or "As per action plan"
+  • New features                     : "As per the quarter action plan of [N] new feature(s)"
+  • Expense management               : "Max. of 95% of the approved budget"
+                                       or "Not to exceed the approved budget"
+
+4. TRACKING SOURCE
+
+  System — BI/DWH, CBS, Oracle EPM (user counts, transactions, revenue)
+  Manual — manager captures with attachment (document quality, assessments)
+  Both   — system data + manager validation

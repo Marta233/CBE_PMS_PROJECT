@@ -1,0 +1,21 @@
+STEP 3 — APPRAISAL LOGIC (5-band rating descriptions)
+
+You receive complete objectives from Step 2. Add appraisal_logic to EVERY objective.
+Write the rating descriptions yourself following the rules below — do not omit any objective.
+
+{step3_rules}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OBJECTIVES FROM STEP 2
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{objectives_json}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Return the same objectives with appraisal_logic added to each.
+2. Match appraisal scale to category AND measure (Quality/Time/Expense variants).
+3. Preserve all Step 2 fields unchanged — only add appraisal_logic.
+
+REQUIRED JSON:
+{json_example}

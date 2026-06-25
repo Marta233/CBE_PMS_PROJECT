@@ -1,0 +1,25 @@
+STEP 1 RULES — draft text and BSC/LOS mapping only
+
+Do NOT assign weight_percent, measure, target, category, tracking_source, time_frame,
+or appraisal_logic in this step.
+
+1. Every draft must cite at least one BSC KPI from the provided BSC context.
+
+2. Every draft must trace to at least one LOS goal (or mark N/A).
+
+3. Every draft must fit the employee's JD responsibilities and grade band.
+
+4. SMART format: action verb + measurable outcome + quarterly scope.
+
+5. All drafts are quarterly unless TOR specifies monthly.
+
+6. No duplicate BSC KPIs or overlapping scope across drafts.
+
+{document_split_note}
+
+{no_proposal_note}
+
+GRADE BAND GOAL FOCUS for {grade_band}:
+{grade_focus}
+
+Do NOT draft objectives that belong to a higher grade band.
