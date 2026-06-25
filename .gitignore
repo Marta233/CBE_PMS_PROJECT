@@ -1,5 +1,8 @@
 Data/
+venv
+.env
 vectorstore
+notebooks/
 # OS
 .DS_Store
 Thumbs.db
