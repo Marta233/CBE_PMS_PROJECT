@@ -27,10 +27,6 @@ class PMSVectorStore:
 
         logger.info(f"\n🤖 Loading embedding model: {embedding_model}")
 
-        # self.embeddings = HuggingFaceEmbeddings(
-        #     model_name=embedding_model
-        # )
-
         embed_kwargs = {"model_name": embedding_model}
         if "bge" in embedding_model.lower():
             embed_kwargs["encode_kwargs"] = {"normalize_embeddings": True}
@@ -44,30 +40,6 @@ class PMSVectorStore:
         if self._bge_query_prefix:
             return f"{self._bge_query_prefix}{query}"
         return query
-
-    # =========================================================
-    # LOAD DOCUMENTS
-    # =========================================================
-
-    # def load_json_documents(self, json_path: Path) -> List[Document]:
-
-    #     logger.info(f"\n📂 Loading documents: {json_path.name}")
-
-    #     with open(json_path, "r", encoding="utf-8") as f:
-    #         raw_docs = json.load(f)
-
-    #     documents = []
-
-    #     for item in raw_docs:
-    #         documents.append(
-    #             Document(
-    #                 page_content=item["text"],
-    #                 metadata=item["metadata"]
-    #             )
-    #         )
-
-    #     logger.info(f"  ✅ Loaded {len(documents)} documents")
-    #     return documents
 
     # =========================================================
     # CREATE VECTORSTORE

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from datetime import datetime
 from typing import Any
 from collections.abc import Callable
@@ -42,6 +43,11 @@ PROMPT_VERSION = "1.1.0"
 STEP1_TEMPERATURE_DEFAULT = 0.3
 STRUCTURED_STEP_TEMPERATURE = 0.0
 ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+def _step_log(message: str) -> None:
+    print(message)
+    sys.stdout.flush()
 
 
 def _employee_key(profile: EmployeeProfile) -> str:
@@ -206,7 +212,7 @@ def _run_step3(
         CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
     )
     sys3, user3 = build_step3_prompt(profile, objectives)
-    print("  Step 3/3: calling LLM (appraisal logic) ...")
+    _step_log("  Step 3/3: calling LLM (appraisal logic) ...")
 
     last_mismatches: list[str] = []
 
@@ -267,9 +273,9 @@ def generate_objectives(
     if cached_drafts and len(cached_drafts) >= num_drafts:
         drafts = cached_drafts[:num_drafts]
         step1_cache_hit = True
-        print("  Step 1/3: cache hit — skipping draft LLM call")
+        _step_log("  Step 1/3: cache hit — skipping draft LLM call")
     else:
-        print("  Step 1/3: calling LLM (draft objectives) — this may take a few minutes ...")
+        _step_log("  Step 1/3: calling LLM (draft objectives) — this may take a few minutes ...")
         for attempt in range(MAX_STEP_RETRIES + 1):
             step1 = _call_llm(
                 sys1, user1,
@@ -328,7 +334,7 @@ def generate_objectives(
     # Step 2 — metrics (retry if objective count wrong)
     sys2, user2 = build_step2_prompt(profile, drafts)
     objectives: list = []
-    print("  Step 2/3: calling LLM (metrics & weights) ...")
+    _step_log("  Step 2/3: calling LLM (metrics & weights) ...")
     for attempt in range(MAX_STEP_RETRIES + 1):
         step2 = _call_llm(
             sys2, user2,
@@ -370,6 +376,27 @@ def generate_objectives(
         )
 
     # Step 3 — appraisal_logic (model-generated)
+    if progress_callback:
+        progress_callback(
+            {
+                "stage": "step3_appraisal",
+                "message": "Objectives with weights ready. Step 3 is writing appraisal logic.",
+                "partial_result": {
+                    "employee_profile": {
+                        "division": profile.division,
+                        "department": profile.department,
+                        "unit": profile.unit,
+                        "job_title": profile.job_title,
+                        "job_grade": profile.job_grade,
+                        "grade_band": profile.grade_band,
+                    },
+                    "objectives": objectives,
+                    "total_weight": sum_weights(objectives),
+                    "pipeline_meta": {"stage": "step3_appraisal"},
+                },
+            }
+        )
+
     try:
         final_objectives = _run_step3(
             profile, objectives,

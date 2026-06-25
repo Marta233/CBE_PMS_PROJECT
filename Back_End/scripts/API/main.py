@@ -15,9 +15,10 @@ from pathlib import Path
 _HERE        = Path(__file__).resolve().parent   # Back_End/scripts/API/
 _SCRIPTS_DIR = _HERE.parent                      # Back_End/scripts/
 _BACK_END    = _SCRIPTS_DIR.parent               # Back_End/
-_DATA_ING    = _SCRIPTS_DIR / "data_ingestion"   # Back_End/scripts/data_ingestion/
+_DATA_ING    = _SCRIPTS_DIR / "Data_Ingestion"   # Back_End/scripts/Data_Ingestion/
 
-for _p in (str(_SCRIPTS_DIR), str(_BACK_END), str(_DATA_ING)):
+# Insert in reverse so _SCRIPTS_DIR ends up first (avoids data_ingestion/config shadowing scripts/config).
+for _p in (str(_DATA_ING), str(_BACK_END), str(_SCRIPTS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

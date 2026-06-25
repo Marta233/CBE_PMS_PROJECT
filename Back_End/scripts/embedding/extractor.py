@@ -382,11 +382,10 @@ class ExtractionResult:
 # =========================================================
 class QueryExtractor:
 
-    def __init__(self, los_docs, jd_docs, bsc_vectorstore, division_indexes=None):
+    def __init__(self, los_docs, jd_docs, bsc_vectorstore):
         self.los_docs        = list(los_docs)
         self.jd_docs         = list(jd_docs)
         self.bsc_vectorstore = bsc_vectorstore
-        self.division_indexes = division_indexes
         self._all_bsc_docs: Optional[List] = None
         self._bge_query_prefix = getattr(bsc_vectorstore, "_bge_query_prefix", "")
 
