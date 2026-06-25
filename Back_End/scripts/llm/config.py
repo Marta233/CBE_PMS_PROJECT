@@ -7,7 +7,7 @@ from pathlib import Path
 _HERE    = Path(__file__).resolve().parent          # Back_End/scripts/
 DATA_DIR = _HERE.parent / "Data"                   # Back_End/Data/
 
-EMBEDDING_MODEL  = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 FAISS_INDEX_PATH = DATA_DIR / "vectorstore" / "bsc_faiss_index"
 LOS_DATA_PATH    = DATA_DIR / "processed"   / "los_documents.JSON"
