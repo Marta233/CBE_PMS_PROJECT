@@ -27,6 +27,10 @@ class PMSVectorStore:
 
         logger.info(f"\n🤖 Loading embedding model: {embedding_model}")
 
+        # self.embeddings = HuggingFaceEmbeddings(
+        #     model_name=embedding_model
+        # )
+
         embed_kwargs = {"model_name": embedding_model}
         if "bge" in embedding_model.lower():
             embed_kwargs["encode_kwargs"] = {"normalize_embeddings": True}

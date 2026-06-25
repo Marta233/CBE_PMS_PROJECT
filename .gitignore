@@ -1,10 +1,16 @@
+Data/
+venv
+.env
+vectorstore
+notebooks/
 # OS
 .DS_Store
 Thumbs.db
-
+s
 # Editor
 .vscode/
 .idea/
+
 *.swp
 *.swo
 
@@ -26,3 +32,5 @@ env/
 *.egg-info/
 .eggs/
 Digital Operationalize Document.docx
+__pycache__
+
