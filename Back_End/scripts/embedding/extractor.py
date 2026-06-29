@@ -387,6 +387,7 @@ class QueryExtractor:
         self.jd_docs         = list(jd_docs)
         self.bsc_vectorstore = bsc_vectorstore
         self._all_bsc_docs: Optional[List] = None
+        self._bge_query_prefix = getattr(bsc_vectorstore, "_bge_query_prefix", "")
 
     # ── BSC doc cache ─────────────────────────────────────────────────────────
     def _load_all_bsc_docs(self) -> List:

@@ -1,0 +1,24 @@
+STEP 2 — ASSIGN METRICS (weights, measure, target, category, tracking)
+
+You receive drafted objectives from Step 1. Assign weight_percent, measure, target,
+category, tracking_source, and time_frame to each draft AND add the fixed critical target.
+
+Apply ALL rules below. You must compute weights — do not leave them blank.
+
+{step2_rules}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DRAFTS FROM STEP 1
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{drafts_json}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. First objective = fixed critical target (Major Critical, {critical_weight}%).
+2. Map each draft_id to a full objective row with all metric fields.
+3. Non-critical weights must sum to exactly {remaining_weight}%.
+4. Preserve draft objective text, bsc_kpi, bsc_strategic_objective, los_alignment.
+
+REQUIRED JSON:
+{json_example}
