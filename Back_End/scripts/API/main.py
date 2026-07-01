@@ -3,7 +3,7 @@ Back_End/scripts/API/main.py
 CBE PMS — Unified API (Ingestion + Generation)
 
 Run from Back_End/ directory:
-    python -m uvicorn scripts.API.main:app --host 0.0.0.0 --port 8000 --reload
+    uvicorn app:api --reload
 
 Swagger UI:  http://localhost:8000/docs
 """

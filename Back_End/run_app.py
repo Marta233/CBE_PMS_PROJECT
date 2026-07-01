@@ -100,7 +100,7 @@ def main() -> None:
             print("  Start Redis, then re-run: python run_app.py")
 
     uvicorn_cmd = [
-        sys.executable, "-m", "uvicorn", "scripts.API.main:app",
+        sys.executable, "-m", "uvicorn", "app:api",
         "--host", args.host,
         "--port", str(args.port),
     ]
