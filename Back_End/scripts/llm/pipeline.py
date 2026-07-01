@@ -17,7 +17,12 @@ from datetime import datetime
 from typing import Any
 from collections.abc import Callable
 
-from config import OLLAMA_MODEL
+from config import (
+    OLLAMA_MODEL,
+    LLM_BACKEND,
+    STEP3_OLLAMA_TIMEOUT_SECONDS,
+    STEP3_VLLM_TIMEOUT_SECONDS,
+)
 from cache.generation_cache import (
     context_fingerprint,
     get_cached_step1_drafts,
@@ -101,6 +106,7 @@ def _call_llm(
     seed: int | None = None,
     schema_example: str | None = None,
     label: str = "llm",
+    timeout_seconds: float | None = None,
 ) -> dict:
     last_error: json.JSONDecodeError | None = None
     raw_response = ""
@@ -111,6 +117,7 @@ def _call_llm(
             system, user,
             model=model, temperature=temperature, num_predict=num_predict, seed=seed,
             label=attempt_label,
+            timeout_seconds=timeout_seconds,
         )
         try:
             return parse_llm_json(raw_response)
@@ -128,6 +135,7 @@ def _call_llm(
             num_predict=num_predict,
             seed=seed,
             label=f"{label}_repair",
+            timeout_seconds=timeout_seconds,
         )
         try:
             return parse_llm_json(repair_raw)
@@ -197,6 +205,17 @@ def _verify_appraisal_complete(objectives: list[dict]) -> list[str]:
     return errors
 
 
+def _merge_step3_appraisal(step2_objectives: list[dict], step3_objectives: list[dict]) -> list[dict]:
+    """Preserve Step 2 fields while adopting appraisal output from Step 3."""
+    merged: list[dict] = []
+    for s2, s3 in zip(step2_objectives, step3_objectives):
+        row = dict(s2)
+        if isinstance(s3, dict) and isinstance(s3.get("appraisal_logic"), dict):
+            row["appraisal_logic"] = dict(s3["appraisal_logic"])
+        merged.append(row)
+    return merged
+
+
 def _run_step3(
     profile: EmployeeProfile,
     objectives: list[dict],
@@ -214,27 +233,38 @@ def _run_step3(
     sys3, user3 = build_step3_prompt(profile, objectives)
     _step_log("  Step 3/3: calling LLM (appraisal logic) ...")
 
-    last_mismatches: list[str] = []
+    last_errors: list[str] = []
+    step3_timeout_seconds = (
+        STEP3_VLLM_TIMEOUT_SECONDS if LLM_BACKEND == "vllm" else STEP3_OLLAMA_TIMEOUT_SECONDS
+    )
 
     for attempt in range(MAX_STEP_RETRIES + 1):
         step3 = _call_llm(
             sys3, user3,
             model=model, temperature=temperature, num_predict=num_predict,
-            seed=seed, schema_example=schema, label="step3_appraisal",
+            seed=seed,
+            schema_example=schema,
+            label="step3_appraisal",
+            timeout_seconds=step3_timeout_seconds,
         )
         final_objectives = step3.get("objectives")
         if not final_objectives:
             continue
 
-        last_mismatches = _verify_step2_preservation(objectives, final_objectives)
-        appraisal_gaps = _verify_appraisal_complete(final_objectives)
-        if not last_mismatches and not appraisal_gaps:
-            return final_objectives
-        last_mismatches = last_mismatches + appraisal_gaps
+        merged_objectives = _merge_step3_appraisal(objectives, final_objectives)
+        preservation_mismatches = _verify_step2_preservation(objectives, final_objectives)
+        appraisal_gaps = _verify_appraisal_complete(merged_objectives)
+        if not appraisal_gaps:
+            if preservation_mismatches:
+                _step_log(
+                    "  Step 3 note: model changed Step 2 fields; preserved Step 2 and applied appraisal only."
+                )
+            return merged_objectives
+        last_errors = preservation_mismatches + appraisal_gaps
 
-    if last_mismatches:
+    if last_errors:
         raise ValueError(
-            "Step 3 incomplete: " + "; ".join(last_mismatches[:5])
+            "Step 3 incomplete: " + "; ".join(last_errors[:5])
         )
     raise ValueError("Step 3 returned no objectives")
 
@@ -404,6 +434,7 @@ def generate_objectives(
             num_predict=max(3072, num_objectives * 500),
         )
     except Exception:
+        _step_log("  Step 3 failed before completion.")
         if progress_callback:
             progress_callback(
                 {

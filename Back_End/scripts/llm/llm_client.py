@@ -174,23 +174,40 @@ def chat_json(
     num_predict: int = 2048,
     seed: int | None = None,
     label: str | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
     from config import OLLAMA_TIMEOUT_SECONDS, VLLM_TIMEOUT_SECONDS
 
     backend, default_model = _backend_config()
     model = model or default_model
-    timeout_seconds = VLLM_TIMEOUT_SECONDS if backend == "vllm" else OLLAMA_TIMEOUT_SECONDS
+    effective_timeout = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else (VLLM_TIMEOUT_SECONDS if backend == "vllm" else OLLAMA_TIMEOUT_SECONDS)
+    )
     request_label = label or "chat"
     started = time.perf_counter()
 
     try:
         if backend == "vllm":
             result = _vllm_chat(
-                system, user, model=model, temperature=temperature, num_predict=num_predict, seed=seed,
+                system,
+                user,
+                model=model,
+                temperature=temperature,
+                num_predict=num_predict,
+                seed=seed,
+                timeout_seconds=effective_timeout,
             )
         else:
             result = _ollama_chat(
-                system, user, model=model, temperature=temperature, num_predict=num_predict, seed=seed,
+                system,
+                user,
+                model=model,
+                temperature=temperature,
+                num_predict=num_predict,
+                seed=seed,
+                timeout_seconds=effective_timeout,
             )
     except LLMTimeoutError as exc:
         log_llm_request(
@@ -199,7 +216,7 @@ def chat_json(
             label=request_label,
             status="TIMEOUT",
             duration_seconds=time.perf_counter() - started,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=effective_timeout,
             system_chars=len(system),
             user_chars=len(user),
             error=str(exc),
@@ -212,7 +229,7 @@ def chat_json(
             label=request_label,
             status="ERROR",
             duration_seconds=time.perf_counter() - started,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=effective_timeout,
             system_chars=len(system),
             user_chars=len(user),
             error=str(exc),
@@ -225,7 +242,7 @@ def chat_json(
             label=request_label,
             status="ERROR",
             duration_seconds=time.perf_counter() - started,
-            timeout_seconds=timeout_seconds,
+            timeout_seconds=effective_timeout,
             system_chars=len(system),
             user_chars=len(user),
             error=str(exc),
@@ -238,7 +255,7 @@ def chat_json(
         label=request_label,
         status="OK",
         duration_seconds=time.perf_counter() - started,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=effective_timeout,
         system_chars=len(system),
         user_chars=len(user),
         response_chars=len(result),
@@ -254,6 +271,7 @@ def _ollama_chat(
     temperature: float,
     num_predict: int,
     seed: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
     from config import OLLAMA_TIMEOUT_SECONDS
 
@@ -263,7 +281,7 @@ def _ollama_chat(
                 system, user,
                 model=model, temperature=temperature, num_predict=num_predict, seed=seed,
             ),
-            OLLAMA_TIMEOUT_SECONDS,
+            timeout_seconds if timeout_seconds is not None else OLLAMA_TIMEOUT_SECONDS,
         )
 
 
@@ -310,11 +328,13 @@ def _vllm_chat(
     temperature: float,
     num_predict: int,
     seed: int | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
     import httpx
     from config import VLLM_BASE_URL, VLLM_TIMEOUT_SECONDS
 
     url = VLLM_BASE_URL.rstrip("/") + "/chat/completions"
+    effective_timeout = timeout_seconds if timeout_seconds is not None else VLLM_TIMEOUT_SECONDS
     body: dict[str, Any] = {
         "model": model,
         "messages": [
@@ -328,13 +348,13 @@ def _vllm_chat(
     if seed is not None:
         body["seed"] = seed
     try:
-        with httpx.Client(timeout=VLLM_TIMEOUT_SECONDS) as client:
+        with httpx.Client(timeout=effective_timeout) as client:
             resp = client.post(url, json=body)
             resp.raise_for_status()
             data = resp.json()
     except httpx.TimeoutException as exc:
         raise LLMTimeoutError(
-            f"LLM request timed out after {VLLM_TIMEOUT_SECONDS:.0f}s."
+            f"LLM request timed out after {effective_timeout:.0f}s."
         ) from exc
     except Exception as exc:
         raise LLMUnavailableError(

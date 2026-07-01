@@ -40,6 +40,8 @@ VLLM_MODEL = os.getenv("PMS_VLLM_MODEL", "meta-llama/Meta-Llama-3-8B-Instruct")
 OLLAMA_TIMEOUT_SECONDS = float(os.getenv("PMS_OLLAMA_TIMEOUT", "600"))
 OLLAMA_HEALTH_TIMEOUT_SECONDS = float(os.getenv("PMS_OLLAMA_HEALTH_TIMEOUT", "5"))
 VLLM_TIMEOUT_SECONDS = float(os.getenv("PMS_VLLM_TIMEOUT", "600"))
+STEP3_OLLAMA_TIMEOUT_SECONDS = float(os.getenv("PMS_STEP3_OLLAMA_TIMEOUT", str(OLLAMA_TIMEOUT_SECONDS)))
+STEP3_VLLM_TIMEOUT_SECONDS = float(os.getenv("PMS_STEP3_VLLM_TIMEOUT", str(VLLM_TIMEOUT_SECONDS)))
 
 LLM_PERF_LOG_PATH = Path(os.getenv("PMS_LLM_PERF_LOG", str(DATA_DIR / "logs" / "llm_performance.log")))
 

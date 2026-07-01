@@ -59,6 +59,9 @@ interface BackendObjective {
   bsc_strategic_objective?: string;
   los_alignment?: string;
   appraisal_logic?: AppraisalLogic;
+  appraisalLogic?: AppraisalLogic;
+  appraisal?: AppraisalLogic;
+  appraisal_scale?: AppraisalLogic;
 }
 
 interface EmployeeProfile {
@@ -98,7 +101,8 @@ interface JobStatusResponse {
 }
 
 const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+// Keep this comfortably above worst-case Step 3 LLM runtime.
+const POLL_TIMEOUT_MS = 25 * 60 * 1000;
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -151,7 +155,9 @@ async function pollJobUntilDone(
     await sleep(POLL_INTERVAL_MS);
   }
 
-  throw new Error('Generation is taking longer than expected. Please try again in a few minutes.');
+  throw new Error(
+    'Generation is still running on the server and may need more time for appraisal logic. Please wait, then click Retry to continue polling this job.',
+  );
 }
 
 const APPRAISAL_RATINGS = [
@@ -166,15 +172,60 @@ const EMPTY_APPRAISAL: AppraisalLogic = {
   rating_5: '', rating_4: '', rating_3: '', rating_2: '', rating_1: '',
 };
 
+function normalizeAppraisalLogic(value: unknown): AppraisalLogic | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as Record<string, unknown>;
+  const normalized: AppraisalLogic = {
+    rating_5: String(raw.rating_5 ?? raw.rating5 ?? raw['5'] ?? '').trim(),
+    rating_4: String(raw.rating_4 ?? raw.rating4 ?? raw['4'] ?? '').trim(),
+    rating_3: String(raw.rating_3 ?? raw.rating3 ?? raw['3'] ?? '').trim(),
+    rating_2: String(raw.rating_2 ?? raw.rating2 ?? raw['2'] ?? '').trim(),
+    rating_1: String(raw.rating_1 ?? raw.rating1 ?? raw['1'] ?? '').trim(),
+  };
+  const hasAnyValue = APPRAISAL_RATINGS.some(({ key }) => normalized[key].length > 0);
+  return hasAnyValue ? normalized : undefined;
+}
+
 function formatGradeBand(band: string): string {
   return band.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
-function fromBackend(b: BackendObjective): LLMObjective {
+type PipelineStage =
+  | 'step1_draft'
+  | 'step2_metrics'
+  | 'step3_appraisal'
+  | 'step3_failed'
+  | 'completed'
+  | null;
+
+function stageProgressLabel(stage: PipelineStage): string {
+  switch (stage) {
+    case 'step1_draft':     return 'Step 1 of 3 — Drafting objectives';
+    case 'step2_metrics':   return 'Step 2 of 3 — Assigning metrics & weights';
+    case 'step3_appraisal': return 'Step 3 of 3 — Writing appraisal logic';
+    case 'step3_failed':    return 'Step 3 failed — showing metrics without appraisal';
+    default:                return 'Generation in progress…';
+  }
+}
+function resolvePipelineStage(
+  progressStage?: string,
+  metaStage?: string,
+): PipelineStage {
+  const stage = progressStage ?? metaStage;
+  if (stage === 'step1_draft') return 'step1_draft';
+  if (stage === 'step2_metrics') return 'step2_metrics';
+  if (stage === 'step3_appraisal') return 'step3_appraisal';
+  if (stage === 'step3_failed') return 'step3_failed';
+  return null;
+}
+
+function backendToFields(b: BackendObjective): Omit<LLMObjective, 'id'> {
+  const appraisalLogic = normalizeAppraisalLogic(
+    b.appraisal_logic ?? b.appraisalLogic ?? b.appraisal ?? b.appraisal_scale,
+  );
   return {
-    id:              uid(),
     objective:       b.objective,
     measure:         b.measure,
     target:          b.target,
@@ -186,8 +237,22 @@ function fromBackend(b: BackendObjective): LLMObjective {
     bsc_kpi:                    b.bsc_kpi,
     bsc_strategic_objective:    b.bsc_strategic_objective,
     los_alignment:              b.los_alignment,
-    appraisal_logic:            b.appraisal_logic,
+    appraisal_logic:            appraisalLogic,
   };
+}
+
+function mergeObjectivesFromBackend(
+  backendObjs: BackendObjective[],
+  prev: LLMObjective[],
+): LLMObjective[] {
+  return backendObjs.map((b, index) => {
+    const id = prev[index]?.id ?? `row-${index}`;
+    return { id, ...backendToFields(b) };
+  });
+}
+
+function fromBackend(b: BackendObjective, index = 0): LLMObjective {
+  return { id: `row-${index}`, ...backendToFields(b) };
 }
 
 function detailMessage(detail: unknown): string {
@@ -262,7 +327,10 @@ function friendlyApiError(status: number, detail: unknown): string {
 async function callAPI(
   division: string, department: string, unit: string,
   jobTitle: string, jobGrade: string, count: number,
-  onProgress?: (partialRows: LLMObjective[], profile: EmployeeProfile, progressText?: string) => void,
+  onProgress?: (
+    partial: BackendResponse,
+    progress?: JobStatusResponse['progress'],
+  ) => void,
 ): Promise<{ objectives: LLMObjective[]; employeeProfile: EmployeeProfile; warning?: string }> {
   let res: Response;
   try {
@@ -283,14 +351,10 @@ async function callAPI(
   if (res.status === 202) {
     const accepted: JobAcceptedResponse = await res.json();
     const { data, warning } = await pollJobUntilDone(accepted.poll_url, (partial, progress) => {
-      onProgress?.(
-        partial.objectives.map(fromBackend),
-        partial.employee_profile,
-        progress?.message,
-      );
+      onProgress?.(partial, progress);
     });
     return {
-      objectives:      data.objectives.map(fromBackend),
+      objectives:      data.objectives.map((o, i) => fromBackend(o, i)),
       employeeProfile: data.employee_profile,
       warning,
     };
@@ -308,7 +372,7 @@ async function callAPI(
   }
   const data: BackendResponse = await res.json();
   return {
-    objectives:      data.objectives.map(fromBackend),
+    objectives:      data.objectives.map((o, i) => fromBackend(o, i)),
     employeeProfile: data.employee_profile,
     warning: undefined,
   };
@@ -691,6 +755,35 @@ function AppraisalExpandPanel({
   );
 }
 
+function GenerationProgressBanner({
+  stage,
+  message,
+  generating,
+}: {
+  stage: PipelineStage;
+  message: string | null;
+  generating: boolean;
+}) {
+  if (!generating) return null;
+
+  return (
+    <div className="mb-4 flex items-start gap-3 p-4 rounded-lg border border-purple-100 dark:border-purple-800/40 bg-purple-50/60 dark:bg-purple-900/15">
+      <svg className="animate-spin w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <div>
+        <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+          {stageProgressLabel(stage)}
+        </p>
+        {message && (
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{message}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 export default function PerformancePlanning() {
   const [division,      setDivision]      = useState('');
@@ -702,6 +795,7 @@ export default function PerformancePlanning() {
   const [generating,    setGenerating]    = useState(false);
   const [genError,      setGenError]      = useState<string | null>(null);
   const [genProgress,   setGenProgress]   = useState<string | null>(null);
+  const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
 
   const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(null);
   const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile | null>(null);
@@ -725,13 +819,33 @@ export default function PerformancePlanning() {
     setGenerating(true);
     setGenError(null);
     setGenProgress(null);
+    setPipelineStage(null);
     try {
       const { objectives: rows, employeeProfile: profile, warning } = await callAPI(
         division, department, unit, jobTitle, jobGrade, numObjectives,
-        (partialRows, partialProfile, progressText) => {
-          setEmployeeProfile(partialProfile);
-          setObjectives(partialRows);
-          setGenProgress(progressText ?? 'Generation in progress...');
+        (partial, progress) => {
+          const stage = resolvePipelineStage(
+            progress?.stage,
+            typeof partial.pipeline_meta?.stage === 'string'
+              ? partial.pipeline_meta.stage
+              : undefined,
+          );
+          setPipelineStage(stage);
+          setEmployeeProfile(partial.employee_profile);
+          setObjectives(prev => {
+            const merged = mergeObjectivesFromBackend(partial.objectives, prev);
+            if (stage === 'step1_draft') {
+              setExpandedRows(new Set(
+                merged
+                  .filter(o => o.bsc_kpi || o.bsc_strategic_objective || o.los_alignment)
+                  .map(o => o.id),
+              ));
+            }
+            return merged;
+          });
+          setGenProgress(
+            progress?.message ?? stageProgressLabel(stage),
+          );
         },
       );
       if (rows.length !== numObjectives) {
@@ -749,6 +863,7 @@ export default function PerformancePlanning() {
       setEmployeeProfile(profile);
       setObjectives(rows);
       setGenProgress(null);
+      setPipelineStage('completed');
       setExpandedRows(new Set());
       if (warning) {
         setGenError(warning);
@@ -948,6 +1063,12 @@ export default function PerformancePlanning() {
       {/* ── Results table ─────────────────────────────────────────────────── */}
       {objectives.length > 0 && (
         <div>
+          <GenerationProgressBanner
+            stage={pipelineStage}
+            message={genProgress}
+            generating={generating}
+          />
+
           {/* Toolbar */}
           <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
             <div className="flex items-center gap-3 flex-wrap">
@@ -1013,6 +1134,7 @@ export default function PerformancePlanning() {
                   {objectives.map((obj, idx) => {
                     const isExpanded = expandedRows.has(obj.id);
                     const hasAppraisal = !!obj.appraisal_logic;
+                    const hasAlignment = !!(obj.bsc_kpi || obj.bsc_strategic_objective || obj.los_alignment);
                     return (
                     <Fragment key={obj.id}>
                     <tr
@@ -1022,7 +1144,7 @@ export default function PerformancePlanning() {
                       <td className="px-2 py-3.5">
                         <button
                           onClick={() => toggleExpand(obj.id)}
-                          title={isExpanded ? 'Collapse appraisal scale' : 'Expand appraisal scale'}
+                          title={isExpanded ? 'Collapse details' : 'Expand BSC / LOS / appraisal details'}
                           className={`p-1.5 rounded-lg transition-all ${
                             isExpanded
                               ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
@@ -1046,15 +1168,22 @@ export default function PerformancePlanning() {
                         <p className="text-sm font-medium text-slate-800 dark:text-slate-100 leading-snug">
                           {obj.objective}
                         </p>
-                        {idx === 0 && (
+                        {obj.category === 'Major Critical' && (
                           <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
                             📌 Critical Target
                           </span>
                         )}
-                        {hasAppraisal && !isExpanded && (
+                        {hasAlignment && !isExpanded && (
                           <button
                             onClick={() => toggleExpand(obj.id)}
                             className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
+                            <Info size={10} /> View details
+                          </button>
+                        )}
+                        {hasAppraisal && !isExpanded && (
+                          <button
+                            onClick={() => toggleExpand(obj.id)}
+                            className="mt-1.5 ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
                             <Scale size={10} /> View appraisal scale
                           </button>
                         )}
@@ -1094,6 +1223,7 @@ export default function PerformancePlanning() {
 
                       {/* Actions */}
                       <td className="px-4 py-3.5">
+                        {!generating && (
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setEditingRow(obj)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
@@ -1105,6 +1235,7 @@ export default function PerformancePlanning() {
                             <Trash2 size={13}/>
                           </button>
                         </div>
+                        )}
                       </td>
                     </tr>
 
