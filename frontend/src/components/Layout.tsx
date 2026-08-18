@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Bell, Search, Sun, Moon } from 'lucide-react';
+import { Search, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../lib/theme';
+import NotificationBell from './NotificationBell';
 
 interface LayoutProps {
   title: string;
@@ -17,7 +18,12 @@ export default function Layout({ title, subtitle, actions, children }: LayoutPro
       {/* Top bar */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold" style={{ color: '#892d8f' }}>{title}</h1>
+          <h1
+            className={subtitle ? 'text-xl font-semibold' : 'text-2xl md:text-3xl font-semibold tracking-tight'}
+            style={{ color: '#892d8f' }}
+          >
+            {title}
+          </h1>
           {subtitle && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
 
@@ -59,11 +65,7 @@ export default function Layout({ title, subtitle, actions, children }: LayoutPro
             )}
           </button>
 
-          {/* Notifications */}
-          <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-            <Bell size={18} className="text-slate-500 dark:text-slate-400" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full" style={{ backgroundColor: '#892d8f' }} />
-          </button>
+          <NotificationBell />
         </div>
       </header>
 

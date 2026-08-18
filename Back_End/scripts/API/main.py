@@ -47,7 +47,9 @@ log = logging.getLogger("pms")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import ingest, generate, status
+from .routers import ingest, generate, status, auth
+from .routers import objective_sets, notifications
+from ..db import ensure_demo_users, init_db_if_needed
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -72,6 +74,13 @@ app.add_middleware(
 app.include_router(ingest.router,   prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(status.router,   prefix="/api")
+app.include_router(auth.router,     prefix="/api")
+app.include_router(objective_sets.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+
+# Ensure local SQLite is created/seeded for v1 workflow.
+init_db_if_needed()
+ensure_demo_users()
 
 
 @app.get("/", tags=["root"])

@@ -1,17 +1,30 @@
 // PerformancePlanning.tsx — Table shows EXACTLY what LLM returns, per-row edit modal
 
-import { useState, Fragment } from 'react';
+import { useEffect, useMemo, useRef, useState, Fragment } from 'react';
 import {
   Sparkles, Plus, ChevronDown, ChevronRight, Save, Edit2, Trash2,
   RefreshCw, AlertCircle, Target, X, Check, Download, Scale, Info,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import {
-  DIVISIONS, DEPARTMENTS, UNITS, JOB_TITLES, JOB_TITLES_BY_UNIT,
+  DEPARTMENTS, UNITS,
   type ObjectiveSet,
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
+
+function getAccessToken(): string | null {
+  return localStorage.getItem('pms_access_token');
+}
+
+async function apiFetch(path: string, init?: RequestInit) {
+  const token = getAccessToken();
+  const headers = new Headers(init?.headers || {});
+  headers.set('Content-Type', headers.get('Content-Type') || 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  return res;
+}
 
 type ObjectiveCategory = 'Cannot Exceed' | 'Can Exceed' | 'Major Critical';
 
@@ -103,6 +116,45 @@ interface JobStatusResponse {
 const POLL_INTERVAL_MS = 2000;
 // Keep this comfortably above worst-case Step 3 LLM runtime.
 const POLL_TIMEOUT_MS = 25 * 60 * 1000;
+
+interface MeResponse {
+  id: number;
+  email: string;
+  name: string;
+  roles: string[];
+  assignments: Array<{ role: string; scope_type: string; scope_id: number | null }>;
+  manager_scope?: {
+    unit_id: number;
+    unit_name: string;
+    department: string;
+    division: string;
+  } | null;
+  director_scope?: {
+    departments: string[];
+    division: string;
+  } | null;
+}
+
+interface ObjectiveSetApi {
+  id: number;
+  unit_id: number;
+  cycle_id: number;
+  status: string;
+  current_version: number;
+  position_statuses?: { position_id: number; status: string }[];
+}
+
+interface PositionRow {
+  id: number;
+  unit_id: number;
+  title: string;
+  grade_level: number | null;
+}
+
+function positionStatusForSet(set: ObjectiveSetApi | null | undefined, positionId: number): string | null {
+  if (!set?.position_statuses) return null;
+  return set.position_statuses.find(p => p.position_id === positionId)?.status ?? null;
+}
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -745,7 +797,7 @@ function AppraisalExpandPanel({
               rows={2}
               value={logic[key]}
               onChange={e => updateRating(key, e.target.value)}
-              placeholder={`Describe what a rating of ${label} (${title}) looks like for this objective…`}
+              placeholder={`Describe what a rating of ${label} (${title}) looks like for this objective`}
               className="flex-1 resize-none rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-300 transition-all"
             />
           </div>
@@ -785,7 +837,16 @@ function GenerationProgressBanner({
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-export default function PerformancePlanning() {
+export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'manager' | 'director' }) {
+  const isDirectorMode = mode === 'director';
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [directorDepartments, setDirectorDepartments] = useState<string[]>([]);
+  const [unitsInScope, setUnitsInScope] = useState<Array<{ id: number; name: string; department: string; division: string }>>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<number | null>(null);
+  const [apiSet, setApiSet] = useState<ObjectiveSetApi | null>(null);
+  const [positions, setPositions] = useState<PositionRow[]>([]);
+  const [selectedPositionId, setSelectedPositionId] = useState<number | ''>('');
+
   const [division,      setDivision]      = useState('');
   const [department,    setDepartment]    = useState('');
   const [unit,          setUnit]          = useState('');
@@ -793,6 +854,7 @@ export default function PerformancePlanning() {
   const [jobGrade,      setJobGrade]      = useState('');
   const [numObjectives, setNumObjectives] = useState(5);
   const [generating,    setGenerating]    = useState(false);
+  const [generatingPositionId, setGeneratingPositionId] = useState<number | null>(null);
   const [genError,      setGenError]      = useState<string | null>(null);
   const [genProgress,   setGenProgress]   = useState<string | null>(null);
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
@@ -800,29 +862,288 @@ export default function PerformancePlanning() {
   const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(null);
   const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile | null>(null);
   const [objectives,  setObjectives]  = useState<LLMObjective[]>([]);
+  const [objectivesByPosition, setObjectivesByPosition] = useState<Record<number, LLMObjective[]>>({});
   const [editingRow,  setEditingRow]  = useState<LLMObjective | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submittingToDirector, setSubmittingToDirector] = useState(false);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
+  const [contentDirty, setContentDirty] = useState(false);
 
-  const availableDepartments = division   ? DEPARTMENTS[division]           || [] : [];
-  const availableUnits       = department ? UNITS[department]               || [] : [];
-  const availableJobTitles   = unit
-    ? JOB_TITLES_BY_UNIT[unit]       || JOB_TITLES
-    : department
-    ? JOB_TITLES_BY_UNIT[department] || JOB_TITLES
-    : JOB_TITLES;
+  const selectedPositionIdRef = useRef(selectedPositionId);
+  const generatingPositionIdRef = useRef<number | null>(null);
+  const contentDirtyRef = useRef(false);
+  selectedPositionIdRef.current = selectedPositionId;
+  generatingPositionIdRef.current = generatingPositionId;
+  contentDirtyRef.current = contentDirty;
 
-  const canGenerate = !!(division && department && jobTitle);
+  const selectedPosition = useMemo(
+    () => positions.find(p => p.id === selectedPositionId) || null,
+    [positions, selectedPositionId],
+  );
+  const generatingPosition = useMemo(
+    () => (generatingPositionId == null ? null : positions.find(p => p.id === generatingPositionId) || null),
+    [positions, generatingPositionId],
+  );
+  const viewingGeneratingPosition =
+    generating && generatingPositionId != null && generatingPositionId === selectedPositionId;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function boot() {
+      const token = getAccessToken();
+      if (!token) {
+        setAuthError('Not logged in. Please log in to continue.');
+        return;
+      }
+
+      try {
+        const meRes = await apiFetch('/api/auth/me');
+        if (!meRes.ok) throw new Error('Failed to load session.');
+        const meJson = (await meRes.json()) as MeResponse;
+        if (cancelled) return;
+
+        if (meJson.manager_scope) {
+          setDivision(meJson.manager_scope.division);
+          setDepartment(meJson.manager_scope.department);
+          setUnit(meJson.manager_scope.unit_name);
+        }
+
+        if (isDirectorMode) {
+          if (!meJson.director_scope) {
+            throw new Error('Director scope is not configured for your account.');
+          }
+          setDirectorDepartments(meJson.director_scope.departments);
+          setDivision(meJson.director_scope.division);
+          if (meJson.director_scope.departments.length === 1) {
+            setDepartment(meJson.director_scope.departments[0]);
+          }
+          const unitsRes = await apiFetch('/api/objective-sets/units');
+          if (!unitsRes.ok) throw new Error('Failed to load units in your scope.');
+          const unitsJson = await unitsRes.json() as Array<{ id: number; name: string; department: string; division: string }>;
+          if (cancelled) return;
+          setUnitsInScope(unitsJson);
+          return;
+        }
+
+        // Create-or-get the manager's unit objective set (active cycle).
+        const setRes = await apiFetch('/api/objective-sets', { method: 'POST', body: JSON.stringify({}) });
+        if (!setRes.ok) throw new Error('Failed to create objective set.');
+        const setJson = (await setRes.json()) as ObjectiveSetApi;
+        if (cancelled) return;
+        setApiSet(setJson);
+
+        // Load positions for the manager's unit.
+        const posRes = await apiFetch(`/api/objective-sets/positions?unit_id=${setJson.unit_id}`);
+        if (!posRes.ok) throw new Error('Failed to load positions.');
+        const posJson = (await posRes.json()) as PositionRow[];
+        if (cancelled) return;
+        setPositions(posJson);
+
+      } catch (e) {
+        if (cancelled) return;
+        setAuthError(e instanceof Error ? e.message : 'Failed to initialize session.');
+      }
+    }
+
+    boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDirectorMode]);
+
+  async function loadDirectorUnitWorkspace(unitName: string) {
+    const unitRow = unitsInScope.find(u => u.name === unitName);
+    if (!unitRow) return;
+    setUnit(unitName);
+    setDivision(unitRow.division);
+    setDepartment(unitRow.department);
+    setSelectedUnitId(unitRow.id);
+    setSelectedPositionId('');
+    setObjectives([]);
+    setObjectivesByPosition({});
+    setContentDirty(false);
+    setApiSet(null);
+
+    const setRes = await apiFetch(`/api/objective-sets/by-unit/${unitRow.id}`, { method: 'POST', body: '{}' });
+    if (!setRes.ok) {
+      let detail = '';
+      try {
+        const j = await setRes.json();
+        detail = typeof j?.detail === 'string' ? j.detail : '';
+      } catch {
+        detail = await setRes.text();
+      }
+      throw new Error(detail || 'Failed to open objective set for this unit.');
+    }
+    const setJson = await setRes.json() as ObjectiveSetApi;
+    setApiSet(setJson);
+
+    const posRes = await apiFetch(`/api/objective-sets/positions?unit_id=${unitRow.id}`);
+    if (!posRes.ok) {
+      let detail = '';
+      try {
+        const j = await posRes.json();
+        detail = typeof j?.detail === 'string' ? j.detail : '';
+      } catch {
+        detail = await posRes.text();
+      }
+      throw new Error(detail || 'Failed to load positions for this unit.');
+    }
+    setPositions(await posRes.json() as PositionRow[]);
+  }
+
+  useEffect(() => {
+    if (!submissionNotice) return;
+    const timer = window.setTimeout(() => setSubmissionNotice(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [submissionNotice]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSetDetail() {
+      if (!apiSet || selectedPositionId === '') return;
+      try {
+        const res = await apiFetch(`/api/objective-sets/${apiSet.id}`);
+        if (!res.ok) return;
+        const json = await res.json() as {
+          objectives?: Array<{ position_id: number } & Record<string, unknown>>;
+          position_statuses?: { position_id: number; status: string }[];
+          status?: string;
+          current_version?: number;
+        };
+        if (!cancelled && json.position_statuses) {
+          setApiSet(prev => prev ? {
+            ...prev,
+            status: json.status ?? prev.status,
+            current_version: json.current_version ?? prev.current_version,
+            position_statuses: json.position_statuses,
+          } : prev);
+        }
+        const grouped: Record<number, LLMObjective[]> = {};
+        const rows = (json.objectives || []) as any[];
+        for (const r of rows) {
+          const pid = Number(r.position_id);
+          const obj: LLMObjective = {
+            id: uid(),
+            objective: String(r.goal_statement ?? ''),
+            measure: String(r.measurement ?? ''),
+            target: String(r.target ?? ''),
+            weight_percent: Number(r.weight ?? 0),
+            category: (r.category ?? 'Can Exceed') as ObjectiveCategory,
+            tracking_source: String(r.tracking_source ?? ''),
+            time_frame: String(r.time_frame ?? ''),
+            bsc_kpi: r.bsc_link ? String(r.bsc_link) : undefined,
+            bsc_strategic_objective: r.strategy_link ? String(r.strategy_link) : undefined,
+            los_alignment: r.los_alignment ? String(r.los_alignment) : undefined,
+            appraisal_logic: (r.rating_guidance_json ?? undefined) as AppraisalLogic | undefined,
+          };
+          grouped[pid] = grouped[pid] || [];
+          grouped[pid].push(obj);
+        }
+        if (cancelled) return;
+        const inFlightId = generatingPositionIdRef.current;
+        const viewingId = Number(selectedPositionId);
+        let preferredForView: LLMObjective[] = grouped[viewingId] || [];
+        setObjectivesByPosition(prev => {
+          const next = { ...grouped };
+          // Keep in-progress / just-generated local rows the server does not have yet.
+          if (inFlightId != null && prev[inFlightId]?.length) {
+            next[inFlightId] = prev[inFlightId];
+          }
+          if (contentDirtyRef.current) {
+            for (const [pid, rows] of Object.entries(prev)) {
+              const id = Number(pid);
+              if (rows.length > 0 && (!next[id] || next[id].length === 0)) {
+                next[id] = rows;
+              }
+            }
+          }
+          preferredForView = next[viewingId] || [];
+          return next;
+        });
+        if (inFlightId != null && viewingId === inFlightId) {
+          // Leave the live streaming table alone while this position is generating.
+          return;
+        }
+        setObjectives(preferredForView);
+        if (!contentDirtyRef.current) {
+          setContentDirty(false);
+        }
+      } catch {
+        // Non-fatal: keep local state.
+      }
+    }
+    loadSetDetail();
+    return () => { cancelled = true; };
+  }, [apiSet, selectedPositionId]);
+
+  const availableDepartments = useMemo(() => {
+    if (isDirectorMode && directorDepartments.length > 0) return directorDepartments;
+    return division ? DEPARTMENTS[division] || [] : [];
+  }, [isDirectorMode, directorDepartments, division]);
+  const availableUnits = useMemo(() => {
+    if (isDirectorMode) {
+      return unitsInScope
+        .filter(u => !department || u.department === department)
+        .map(u => u.name);
+    }
+    return department ? UNITS[department] || [] : [];
+  }, [isDirectorMode, unitsInScope, department]);
+  // Job titles are derived from the selected position (unit scope).
+
+  const canGenerate = !!(
+    division && department && unit && selectedPosition && apiSet
+    && (!isDirectorMode || selectedUnitId)
+  );
+
+  function handlePositionChange(rawId: string) {
+    const id = rawId ? Number(rawId) : '';
+    setSelectedPositionId(id);
+    if (id === '') {
+      setObjectives([]);
+      setJobTitle('');
+      setJobGrade('');
+      return;
+    }
+    const pos = positions.find(p => p.id === id);
+    if (pos) {
+      setJobTitle(pos.title);
+      setJobGrade(pos.grade_level != null ? String(pos.grade_level) : '');
+      setObjectives(objectivesByPosition[id] || []);
+    }
+  }
 
   async function handleGenerate(isRegen = false) {
-    if (!canGenerate) return;
+    if (!canGenerate || generateLocked) return;
+    const pos = selectedPosition;
+    if (!pos || selectedPositionId === '') {
+      setGenError('Please select a position.');
+      return;
+    }
+    const genPosId = Number(selectedPositionId);
+    const genPosTitle = pos.title;
+    const effectiveJobTitle = pos.title;
+    const effectiveJobGrade = jobGrade;
+    const effectiveNumObjectives = numObjectives;
+    const effectiveDivision = division;
+    const effectiveDepartment = department;
+    const effectiveUnit = unit;
+
     setGenerating(true);
+    setGeneratingPositionId(genPosId);
+    setContentDirty(true);
     setGenError(null);
     setGenProgress(null);
     setPipelineStage(null);
+    setJobTitle(effectiveJobTitle);
+
     try {
       const { objectives: rows, employeeProfile: profile, warning } = await callAPI(
-        division, department, unit, jobTitle, jobGrade, numObjectives,
+        effectiveDivision, effectiveDepartment, effectiveUnit,
+        effectiveJobTitle, effectiveJobGrade, effectiveNumObjectives,
         (partial, progress) => {
           const stage = resolvePipelineStage(
             progress?.stage,
@@ -831,62 +1152,100 @@ export default function PerformancePlanning() {
               : undefined,
           );
           setPipelineStage(stage);
-          setEmployeeProfile(partial.employee_profile);
-          setObjectives(prev => {
-            const merged = mergeObjectivesFromBackend(partial.objectives, prev);
-            if (stage === 'step1_draft') {
-              setExpandedRows(new Set(
-                merged
-                  .filter(o => o.bsc_kpi || o.bsc_strategic_objective || o.los_alignment)
-                  .map(o => o.id),
-              ));
+          setGenProgress(progress?.message ?? stageProgressLabel(stage));
+
+          setObjectivesByPosition(prev => {
+            const merged = mergeObjectivesFromBackend(partial.objectives, prev[genPosId] || []);
+            if (selectedPositionIdRef.current === genPosId) {
+              setEmployeeProfile(partial.employee_profile);
+              setObjectives(merged);
+              if (stage === 'step1_draft') {
+                setExpandedRows(new Set(
+                  merged
+                    .filter(o => o.bsc_kpi || o.bsc_strategic_objective || o.los_alignment)
+                    .map(o => o.id),
+                ));
+              }
             }
-            return merged;
+            return { ...prev, [genPosId]: merged };
           });
-          setGenProgress(
-            progress?.message ?? stageProgressLabel(stage),
-          );
         },
       );
-      if (rows.length !== numObjectives) {
+      if (rows.length !== effectiveNumObjectives) {
         throw new Error(
-          `Expected ${numObjectives} objectives but received ${rows.length}. Please try again.`,
+          `Expected ${effectiveNumObjectives} objectives but received ${rows.length}. Please try again.`,
         );
       }
       if (!isRegen || !currentSet) {
         setCurrentSet({
-          id: uid(), division, department, unit, job_title: jobTitle,
-          num_objectives: numObjectives, status: 'draft',
+          id: uid(),
+          division: effectiveDivision,
+          department: effectiveDepartment,
+          unit: effectiveUnit,
+          job_title: effectiveJobTitle,
+          num_objectives: effectiveNumObjectives,
+          status: 'draft',
           created_at: new Date().toISOString(),
         });
       }
-      setEmployeeProfile(profile);
-      setObjectives(rows);
-      setGenProgress(null);
-      setPipelineStage('completed');
-      setExpandedRows(new Set());
-      if (warning) {
-        setGenError(warning);
+      setObjectivesByPosition(prev => ({ ...prev, [genPosId]: rows }));
+      if (selectedPositionIdRef.current === genPosId) {
+        setEmployeeProfile(profile);
+        setObjectives(rows);
+        setExpandedRows(new Set());
+        setGenProgress(null);
+        setPipelineStage('completed');
+        if (warning) setGenError(warning);
+      } else {
+        setSubmissionNotice(`Objectives ready for ${genPosTitle}. Switch back to that position to review.`);
+        if (warning) setGenError(`${genPosTitle}: ${warning}`);
       }
     } catch (err) {
       console.error('Objective generation failed:', err);
-      setGenError(err instanceof Error ? err.message : 'We could not generate objectives this time. Please try again.');
+      const message = err instanceof Error ? err.message : 'We could not generate objectives this time. Please try again.';
+      if (selectedPositionIdRef.current === genPosId) {
+        setGenError(message);
+      } else {
+        setGenError(`${genPosTitle}: ${message}`);
+      }
     } finally {
       setGenerating(false);
+      setGeneratingPositionId(null);
     }
   }
 
   function saveEdit(updated: LLMObjective) {
+    setContentDirty(true);
     setObjectives(prev => prev.map(o => o.id === updated.id ? updated : o));
+    if (selectedPositionId !== '') {
+      setObjectivesByPosition(prev => ({
+        ...prev,
+        [Number(selectedPositionId)]: (prev[Number(selectedPositionId)] || []).map(o => o.id === updated.id ? updated : o),
+      }));
+    }
     setEditingRow(null);
   }
 
   function deleteRow(id: string) {
+    setContentDirty(true);
     setObjectives(prev => prev.filter(o => o.id !== id));
+    if (selectedPositionId !== '') {
+      setObjectivesByPosition(prev => ({
+        ...prev,
+        [Number(selectedPositionId)]: (prev[Number(selectedPositionId)] || []).filter(o => o.id !== id),
+      }));
+    }
   }
 
   function saveAdd(row: LLMObjective) {
+    setContentDirty(true);
     setObjectives(prev => [...prev, row]);
+    if (selectedPositionId !== '') {
+      setObjectivesByPosition(prev => ({
+        ...prev,
+        [Number(selectedPositionId)]: [...(prev[Number(selectedPositionId)] || []), row],
+      }));
+    }
     setShowAddModal(false);
   }
 
@@ -900,6 +1259,7 @@ export default function PerformancePlanning() {
   }
 
   function updateAppraisal(id: string, appraisal_logic: AppraisalLogic) {
+    setContentDirty(true);
     setObjectives(prev => prev.map(o =>
       o.id === id ? { ...o, appraisal_logic } : o,
     ));
@@ -910,113 +1270,445 @@ export default function PerformancePlanning() {
     setShowAddModal(true);
   }
 
+  function buildObjectiveSavePayload() {
+    if (!selectedPositionId) return null;
+    const allObjectives = Object.entries(objectivesByPosition).flatMap(([pid, rows]) =>
+      rows.map((o) => ({
+        position_id: Number(pid),
+        goal_statement: o.objective,
+        measurement: o.measure,
+        target: o.target,
+        weight: Math.round(o.weight_percent),
+        category: o.category,
+        tracking_source: o.tracking_source,
+        time_frame: o.time_frame,
+        rating_guidance_json: o.appraisal_logic ?? null,
+        bsc_link: o.bsc_kpi ?? null,
+        strategy_link: o.bsc_strategic_objective ?? null,
+        los_alignment: o.los_alignment ?? null,
+      })),
+    );
+
+    // Also include the currently visible objectives, even if the user hasn't switched positions yet.
+    const pid = Number(selectedPositionId);
+    const merged = new Map<string, any>();
+    for (const row of [...allObjectives, ...objectives.map(o => ({
+      position_id: pid,
+      goal_statement: o.objective,
+      measurement: o.measure,
+      target: o.target,
+      weight: Math.round(o.weight_percent),
+      category: o.category,
+      tracking_source: o.tracking_source,
+      time_frame: o.time_frame,
+      rating_guidance_json: o.appraisal_logic ?? null,
+      bsc_link: o.bsc_kpi ?? null,
+      strategy_link: o.bsc_strategic_objective ?? null,
+      los_alignment: o.los_alignment ?? null,
+    }))]) {
+      merged.set(`${row.position_id}:${row.goal_statement}:${row.measurement}:${row.target}`, row);
+    }
+
+    return {
+      objectives: Array.from(merged.values()),
+      position_ids: Number.isFinite(pid) ? [pid] : [],
+      snapshot_json: {
+        division,
+        department,
+        unit,
+        saved_from: 'frontend',
+        employee_profile: employeeProfile,
+      },
+    };
+  }
+
+  function positionStatus(positionId: number | '' | null | undefined): string | null {
+    if (positionId === '' || positionId == null) return null;
+    return positionStatusForSet(apiSet, Number(positionId));
+  }
+
+  async function saveDraftOnly() {
+    if (!apiSet) {
+      setGenError('No objective set is available for your session.');
+      return;
+    }
+    if (!selectedPositionId) {
+      setGenError('Please select a position first.');
+      return;
+    }
+    try {
+      setSavingDraft(true);
+      setGenError(null);
+      setSubmissionNotice(null);
+      const payload = buildObjectiveSavePayload();
+      if (!payload) {
+        throw new Error('Please select a position first.');
+      }
+
+      const saveRes = await apiFetch(`/api/objective-sets/${apiSet.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (!saveRes.ok) {
+        let detail = '';
+        try {
+          const j = await saveRes.json();
+          detail = typeof j?.detail === 'string' ? j.detail : '';
+        } catch {
+          detail = await saveRes.text();
+        }
+        throw new Error(detail || 'Failed to save objective set.');
+      }
+      const savedSet = (await saveRes.json()) as ObjectiveSetApi;
+      setApiSet(savedSet);
+      setContentDirty(false);
+      const posStatus = positionStatusForSet(savedSet, Number(selectedPositionId));
+      setGenProgress('Draft saved. You can continue editing or submit to Director when ready.');
+      setSubmissionNotice(
+        isDirectorMode
+          ? 'Objectives saved for the unit manager. They can review and submit to Director Review.'
+          : posStatus === 'saved' || !posStatus
+            ? 'Draft saved successfully. Submit to Director when weights total 100%.'
+            : 'Draft saved successfully. This position remains editable until you submit it to Director.',
+      );
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Failed to save draft.');
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function submitToDirector() {
+    if (!apiSet) {
+      setGenError('No objective set is available for your session.');
+      return;
+    }
+    if (!selectedPositionId) {
+      setGenError('Please select a position first.');
+      return;
+    }
+    const posId = Number(selectedPositionId);
+    if (!window.confirm('Submit this position to Unit Director? You will no longer be able to edit it as manager.')) {
+      return;
+    }
+    try {
+      setSubmittingToDirector(true);
+      setGenError(null);
+      setSubmissionNotice(null);
+
+      const payload = buildObjectiveSavePayload();
+      if (!payload) {
+        throw new Error('Please select a position first.');
+      }
+      const saveRes = await apiFetch(`/api/objective-sets/${apiSet.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      if (!saveRes.ok) {
+        let detail = '';
+        try {
+          const j = await saveRes.json();
+          detail = typeof j?.detail === 'string' ? j.detail : '';
+        } catch {
+          detail = await saveRes.text();
+        }
+        throw new Error(detail || 'Failed to save objective set before submission.');
+      }
+      const savedSet = (await saveRes.json()) as ObjectiveSetApi;
+      setApiSet(savedSet);
+
+      const actRes = await apiFetch(`/api/objective-sets/${apiSet.id}/activate`, {
+        method: 'POST',
+        body: JSON.stringify({ position_ids: [posId] }),
+      });
+      if (!actRes.ok) {
+        let detail = '';
+        try {
+          const j = await actRes.json();
+          detail = typeof j?.detail === 'string' ? j.detail : '';
+        } catch {
+          detail = await actRes.text();
+        }
+        if (detail.includes('invalid transition for your role')) {
+          const st = positionStatusForSet(savedSet, posId);
+          const statusHint = st ? ` Current status: ${st.replaceAll('_', ' ')}.` : '';
+          setGenProgress('Could not submit this position from its current workflow status.');
+          setSubmissionNotice(
+            `Submit failed because this position is not ready for Director submission.${statusHint}`,
+          );
+          return;
+        }
+        throw new Error(detail || 'Failed to activate objective set.');
+      }
+      const activatedSet = (await actRes.json()) as ObjectiveSetApi;
+      setApiSet(activatedSet);
+      setContentDirty(false);
+
+      setCurrentSet(s => s ? { ...s, status: 'active' } : s);
+      setGenProgress('Saved and sent to Unit Director for approval.');
+      setSubmissionNotice('This position is now in Director Review and remains viewable here as read-only.');
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : 'Failed to submit to Director.');
+    } finally {
+      setSubmittingToDirector(false);
+    }
+  }
+
   const totalWeight = objectives.reduce((s, o) => s + o.weight_percent, 0);
   const weightOk    = Math.abs(totalWeight - 100) <= 1;
   const editingIndex = editingRow ? objectives.findIndex(o => o.id === editingRow.id) : -1;
+  const positionHasObjectives = objectives.length > 0;
+  const selectedPosStatus = positionStatus(selectedPositionId);
+  const inDirectorQueue =
+    selectedPosStatus === 'activated_to_director' ||
+    selectedPosStatus === 'vp_rejected_to_director';
+  const pastDirectorApproval =
+    selectedPosStatus === 'director_approved_and_activated_to_vp' ||
+    selectedPosStatus === 'vp_approved_final' ||
+    selectedPosStatus === 'sent_to_pms';
+  const alreadySubmittedByManager =
+    !viewingGeneratingPosition &&
+    !contentDirty &&
+    weightOk &&
+    positionHasObjectives &&
+    (inDirectorQueue || pastDirectorApproval);
+  const needsResubmit =
+    contentDirty &&
+    (selectedPosStatus === 'activated_to_director' ||
+      selectedPosStatus === 'director_rejected_to_manager');
+  // Lock generate only for the selected position that already has submitted objectives.
+  const setSubmittedToDirector =
+    !isDirectorMode &&
+    inDirectorQueue &&
+    !contentDirty &&
+    positionHasObjectives;
+  const generateLocked = isDirectorMode
+    ? (generating || submittingToDirector)
+    : (setSubmittedToDirector
+      || (pastDirectorApproval && !contentDirty && positionHasObjectives)
+      || submittingToDirector
+      || generating);
+  const managerReadOnly = isDirectorMode
+    ? (viewingGeneratingPosition || submittingToDirector)
+    : (alreadySubmittedByManager || submittingToDirector || viewingGeneratingPosition);
+  const saveBusy = savingDraft || submittingToDirector || viewingGeneratingPosition;
+  const submitDisabled = saveBusy || alreadySubmittedByManager || !weightOk;
+  const submitLabel = viewingGeneratingPosition
+    ? 'Generating...'
+    : submittingToDirector
+      ? 'Submitting...'
+      : alreadySubmittedByManager
+        ? selectedPosStatus === 'director_approved_and_activated_to_vp'
+          ? 'Already with VP'
+          : selectedPosStatus === 'vp_approved_final' || selectedPosStatus === 'sent_to_pms'
+            ? 'Finalized'
+            : 'Submitted to Director'
+        : needsResubmit
+          ? 'Resubmit to Director'
+          : 'Submit to Director';
 
   return (
-    <Layout title="Performance Planning"
-      subtitle="Generate AI-powered objectives aligned to your role and department">
+    <Layout title="Performance Planning">
+
+      {authError && (
+        <div className="mb-6 p-4 rounded-lg border border-red-200 dark:border-red-800/40 bg-red-50/60 dark:bg-red-900/15 text-sm text-red-700 dark:text-red-200">
+          {authError}
+        </div>
+      )}
+      {submissionNotice && (
+        <div className="fixed top-4 right-4 z-50 max-w-md p-3 rounded-lg border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50/95 dark:bg-emerald-900/90 text-sm text-emerald-800 dark:text-emerald-200 shadow-lg">
+          {submissionNotice}
+        </div>
+      )}
+      {generating && generatingPosition && !viewingGeneratingPosition && (
+        <div className="mb-4 flex items-center justify-between gap-3 p-3 rounded-lg border border-purple-200 dark:border-purple-800/40 bg-purple-50/70 dark:bg-purple-900/20">
+          <div className="flex items-start gap-2 text-sm text-purple-900 dark:text-purple-100 min-w-0">
+            <svg className="animate-spin w-4 h-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            <div className="min-w-0">
+              <p className="font-medium">
+                Generating in background for {generatingPosition.title}
+              </p>
+              {genProgress && (
+                <p className="mt-0.5 text-xs text-purple-700/80 dark:text-purple-200/80">{genProgress}</p>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handlePositionChange(String(generatingPosition.id))}
+            className="text-xs font-semibold text-purple-700 dark:text-purple-200 hover:underline flex-shrink-0"
+          >
+            View progress
+          </button>
+        </div>
+      )}
 
       {/* ── Config panel ──────────────────────────────────────────────────── */}
       <div className="card p-6 mb-6">
         <div className="flex items-center gap-2 mb-5">
           <Sparkles size={18} style={{ color: '#892d8f' }} />
           <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-            Configure Objective Generation
+            {unit
+              ? <>Planning for <span style={{ color: '#892d8f' }}>{unit}</span>: Objective Generation</>
+              : 'Objective Generation'}
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {/* Division */}
-          <div>
-            <label className="label">Division</label>
-            <div className="relative">
-              <select value={division}
-                onChange={e => { setDivision(e.target.value); setDepartment(''); setUnit(''); setJobTitle(''); }}
-                className="select-field pr-8">
-                <option value="">Select division</option>
-                {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        {/* Org context — only show known facts (never blank dashes) */}
+        {(() => {
+          const facts = [
+            { label: 'Division', value: division },
+            { label: 'Department', value: department },
+            // Unit is a fact for managers; directors select it in the controls row
+            ...(!isDirectorMode && unit ? [{ label: 'Unit', value: unit }] : []),
+          ].filter(f => f.value);
+          if (facts.length === 0) return null;
+          return (
+            <div className="mb-5 flex flex-wrap items-stretch gap-px rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600 bg-slate-200 dark:bg-slate-600">
+              {facts.map(({ label, value }) => (
+                <div
+                  key={label}
+                  className="flex-1 min-w-[140px] px-4 py-3 bg-slate-50 dark:bg-slate-800/80"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-0.5">
+                    {label}
+                  </p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate" title={value}>
+                    {value}
+                  </p>
+                </div>
+              ))}
             </div>
-          </div>
-          {/* Department */}
-          <div>
-            <label className="label">Department</label>
-            <div className="relative">
-              <select value={department} disabled={!division}
-                onChange={e => { setDepartment(e.target.value); setUnit(''); setJobTitle(''); }}
-                className="select-field pr-8 disabled:opacity-50">
-                <option value="">Select department</option>
-                {availableDepartments.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
-          {/* Unit */}
-          <div>
-            <label className="label">Unit </label>
-            <div className="relative">
-              <select value={unit} disabled={!department}
-                onChange={e => { setUnit(e.target.value); setJobTitle(''); }}
-                className="select-field pr-8 disabled:opacity-50">
-                <option value="">Select unit</option>
-                {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
-          {/* Job Title */}
-          <div>
-            <label className="label">Job Title</label>
-            <div className="relative">
-              <select value={jobTitle} onChange={e => setJobTitle(e.target.value)} className="select-field pr-8">
-                <option value="">Select title</option>
-                {availableJobTitles.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
-        <div className="flex items-end gap-4 flex-wrap">
-          {/* Job Grade */}
-          <div>
+        {/* Configurable controls — full-width row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+          {isDirectorMode && availableDepartments.length > 1 && (
+            <div className="lg:col-span-2">
+              <label className="label">Department</label>
+              <div className="relative">
+                <select
+                  value={department}
+                  disabled={!division}
+                  onChange={e => {
+                    setDepartment(e.target.value);
+                    setUnit('');
+                    setJobTitle('');
+                    setSelectedUnitId(null);
+                    setApiSet(null);
+                    setPositions([]);
+                    setSelectedPositionId('');
+                  }}
+                  className="select-field pr-8 w-full disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  <option value="">Select department</option>
+                  {availableDepartments.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+          )}
+
+          {isDirectorMode && (
+            <div className={availableDepartments.length > 1 ? 'lg:col-span-2' : 'lg:col-span-3'}>
+              <label className="label">Unit</label>
+              <div className="relative">
+                <select
+                  value={unit}
+                  disabled={!department}
+                  onChange={e => {
+                    loadDirectorUnitWorkspace(e.target.value).catch(err => {
+                      setAuthError(err instanceof Error ? err.message : 'Failed to load unit.');
+                    });
+                  }}
+                  className="select-field pr-8 w-full disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  <option value="">Select unit</option>
+                  {availableUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+          )}
+
+          <div className={isDirectorMode
+            ? (availableDepartments.length > 1 ? 'lg:col-span-3' : 'lg:col-span-3')
+            : 'lg:col-span-4'}>
+            <label className="label">Position</label>
+            <div className="relative">
+              <select
+                value={selectedPositionId}
+                onChange={e => handlePositionChange(e.target.value)}
+                disabled={isDirectorMode && !apiSet}
+                className="select-field pr-8 w-full disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                <option value="">{isDirectorMode ? 'Select position in unit' : 'Select position in your unit'}</option>
+                {positions.map(p => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            </div>
+          </div>
+
+          <div className="lg:col-span-2">
             <label className="label">Job Grade <span className="text-slate-400 normal-case font-normal">(optional)</span></label>
             <input type="text" value={jobGrade} onChange={e => setJobGrade(e.target.value)}
-              placeholder="e.g. 13" className="select-field w-28" />
+              placeholder="e.g. 13" className="select-field w-full" />
           </div>
-          {/* Num Objectives */}
-          <div>
+
+          <div className="lg:col-span-2">
             <label className="label">No. of Objectives</label>
-            <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden bg-white dark:bg-slate-700 h-[42px]">
+            <div className="flex items-center border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden bg-white dark:bg-slate-700 h-[42px] w-full">
               <input type="number" min={2} max={10} value={numObjectives}
                 onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setNumObjectives(Math.min(10, Math.max(2, v))); }}
-                className="w-16 px-3 text-sm font-semibold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none" />
-              <div className="flex flex-col h-full border-l border-slate-200 dark:border-slate-600">
-                <button onClick={() => setNumObjectives(n => Math.min(10, n + 1))} disabled={numObjectives >= 10}
-                  className="flex-1 w-8 flex items-center justify-center text-slate-500 hover:text-purple-600 disabled:opacity-30 border-b border-slate-200 text-xs font-bold">+</button>
-                <button onClick={() => setNumObjectives(n => Math.max(2, n - 1))} disabled={numObjectives <= 2}
+                className="flex-1 min-w-0 px-3 text-sm font-semibold text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none" />
+              <div className="flex flex-col h-full border-l border-slate-200 dark:border-slate-600 flex-shrink-0">
+                <button type="button" onClick={() => setNumObjectives(n => Math.min(10, n + 1))} disabled={numObjectives >= 10}
+                  className="flex-1 w-8 flex items-center justify-center text-slate-500 hover:text-purple-600 disabled:opacity-30 border-b border-slate-200 dark:border-slate-600 text-xs font-bold">+</button>
+                <button type="button" onClick={() => setNumObjectives(n => Math.max(2, n - 1))} disabled={numObjectives <= 2}
                   className="flex-1 w-8 flex items-center justify-center text-slate-500 hover:text-purple-600 disabled:opacity-30 text-xs font-bold">−</button>
               </div>
             </div>
           </div>
-          {/* Generate */}
-          <div className="flex items-center gap-3 pb-0.5">
-            <button onClick={() => handleGenerate(false)} disabled={!canGenerate || generating}
-              className="btn-primary">
-              {generating
-                ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                    </svg>Generating...</>
-                : <><Sparkles size={16}/>Generate Objectives</>}
-            </button>
+
+          <div className={`flex flex-col gap-1.5 ${
+            isDirectorMode
+              ? (availableDepartments.length > 1 ? 'lg:col-span-3' : 'lg:col-span-2')
+              : 'lg:col-span-4'
+          }`}>
+            <label className="label invisible select-none" aria-hidden="true">Action</label>
+            <div className="flex items-center gap-3 min-h-[42px]">
+              <button onClick={() => handleGenerate(false)} disabled={!canGenerate || generateLocked}
+                className="btn-primary flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  generating && !viewingGeneratingPosition
+                    ? `Generation in progress for ${generatingPosition?.title || 'another position'}`
+                    : setSubmittedToDirector
+                      ? 'This position was already submitted to Director'
+                      : undefined
+                }>
+                {generating
+                  ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                      </svg>{viewingGeneratingPosition ? 'Generating...' : 'Generating elsewhere...'}</>
+                  : <><Sparkles size={16}/>Generate Objectives</>}
+              </button>
+            </div>
             {!canGenerate && (
-              <p className="text-sm text-slate-400">Fill in Division, Department, and Job Title first</p>
+              <p className="text-sm text-slate-400">
+                {isDirectorMode && !unit ? 'Select a unit first' : 'Select a position first'}
+              </p>
             )}
-            {generating && genProgress && (
+            {canGenerate && setSubmittedToDirector && (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Already submitted to Director</p>
+            )}
+            {viewingGeneratingPosition && genProgress && (
               <p className="text-sm text-slate-500 dark:text-slate-300">{genProgress}</p>
             )}
           </div>
@@ -1030,7 +1722,7 @@ export default function PerformancePlanning() {
             </div>
             <button
               onClick={() => handleGenerate(objectives.length > 0)}
-              disabled={generating || !canGenerate}
+              disabled={generateLocked || !canGenerate}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
               style={{ backgroundColor: '#892d8f' }}>
               <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
@@ -1066,7 +1758,7 @@ export default function PerformancePlanning() {
           <GenerationProgressBanner
             stage={pipelineStage}
             message={genProgress}
-            generating={generating}
+            generating={viewingGeneratingPosition}
           />
 
           {/* Toolbar */}
@@ -1076,17 +1768,21 @@ export default function PerformancePlanning() {
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
                 {objectives.length} objectives
               </span>
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${weightOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                Total weight: {totalWeight}% {weightOk ? '✓' : '⚠ should be 100%'}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                weightOk
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+              }`}>
+                Total weight: {totalWeight}%{weightOk ? ' ✓' : ' — must be 100%'}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => handleGenerate(true)} disabled={generating}
+              <button onClick={() => handleGenerate(true)} disabled={generateLocked || managerReadOnly}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
-                <RefreshCw size={14} className={generating ? 'animate-spin' : ''}/>Regenerate
+                <RefreshCw size={14} className={viewingGeneratingPosition ? 'animate-spin' : ''}/>Regenerate
               </button>
-              <button onClick={openAddModal}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors">
+              <button onClick={openAddModal} disabled={managerReadOnly}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
                 <Plus size={14}/>Add Row
               </button>
               <button onClick={() => downloadCSV(objectives, currentSet, employeeProfile)}
@@ -1098,11 +1794,34 @@ export default function PerformancePlanning() {
                 <Download size={14}/>JSON
               </button>
               <button
-                onClick={() => setCurrentSet(s => s ? { ...s, status: 'active' } : s)}
-                className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
-                style={{ backgroundColor: '#892d8f' }}>
-                <Save size={14}/>Save & Activate
+                onClick={saveDraftOnly}
+                disabled={saveBusy || (!isDirectorMode && alreadySubmittedByManager)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50">
+                <Save size={14}/>
+                {savingDraft
+                  ? 'Saving...'
+                  : isDirectorMode
+                    ? 'Save for Manager'
+                    : 'Save Draft'}
               </button>
+              {!isDirectorMode && (
+              <button
+                onClick={submitToDirector}
+                disabled={submitDisabled}
+                title={!weightOk && !generating && !alreadySubmittedByManager ? 'Total weight must equal 100% before submitting' : undefined}
+                className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-70"
+                style={{ backgroundColor: '#892d8f' }}>
+                {viewingGeneratingPosition ? (
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                ) : (
+                  <Save size={14}/>
+                )}
+                {submitLabel}
+              </button>
+              )}
             </div>
           </div>
 
@@ -1223,7 +1942,7 @@ export default function PerformancePlanning() {
 
                       {/* Actions */}
                       <td className="px-4 py-3.5">
-                        {!generating && (
+                        {!viewingGeneratingPosition && !managerReadOnly && (
                         <div className="flex items-center gap-1.5">
                           <button onClick={() => setEditingRow(obj)}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
@@ -1275,7 +1994,7 @@ export default function PerformancePlanning() {
       )}
 
       {/* Empty state */}
-      {objectives.length === 0 && !generating && (
+      {objectives.length === 0 && !viewingGeneratingPosition && (
         <div className="card p-12 text-center">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: 'rgba(137,45,143,0.08)' }}>
@@ -1287,7 +2006,21 @@ export default function PerformancePlanning() {
           <p className="text-sm text-slate-500 max-w-sm mx-auto">
             {genError
               ? genError
-              : 'Select your division, department, job title, and number of objectives, then click "Generate Objectives".'}
+              : generating
+                ? `Generation is running for ${generatingPosition?.title || 'another position'}. You can keep browsing here.`
+                : 'Select a position and number of objectives, then click "Generate Objectives".'}
+          </p>
+        </div>
+      )}
+      {objectives.length === 0 && viewingGeneratingPosition && (
+        <div className="card p-12 text-center">
+          <GenerationProgressBanner
+            stage={pipelineStage}
+            message={genProgress}
+            generating
+          />
+          <p className="text-sm text-slate-500 max-w-sm mx-auto">
+            You can switch to another position while this finishes in the background.
           </p>
         </div>
       )}

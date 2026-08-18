@@ -1,4 +1,14 @@
-export type PageKey = 'dashboard' | 'ingestion' | 'planning' | 'tracking' | 'appraisal' | 'feedback';
+export type PageKey =
+  | 'dashboard'
+  | 'ingestion'
+  | 'planning'
+  | 'director_planning'
+  | 'director_review'
+  | 'vp_review'
+  | 'pms_register'
+  | 'tracking'
+  | 'appraisal'
+  | 'feedback';
 
 export interface ObjectiveSet {
   id: string;

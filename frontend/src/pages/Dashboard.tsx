@@ -7,10 +7,10 @@ import {
 import {
   Target, TrendingUp, Users, Star,
   CircleCheck as CheckCircle, Clock,
-  CircleAlert as AlertCircle, ChevronDown,
+  ChevronDown,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { DIVISIONS, DEPARTMENTS, UNITS, JOB_TITLES } from '../types';
+import { DIVISIONS, DEPARTMENTS } from '../types';
 
 const COLORS = ['#2596be', '#10b981', '#f59e0b', '#ef4444', '#1e7ea3', '#06b6d4'];
 
@@ -140,10 +140,7 @@ export default function Dashboard() {
   const perfChartData = useMemo(() => SAMPLE_DATA[perfFilter.groupBy] ?? [], [perfFilter.groupBy]);
 
   const availableDepartments = perfFilter.division ? DEPARTMENTS[perfFilter.division] || [] : [];
-  const availableUnits       = perfFilter.department ? UNITS[perfFilter.department] || [] : [];
-  const availableJobTitles   = perfFilter.unit
-    ? (UNITS[perfFilter.unit] ? JOB_TITLES : JOB_TITLES)
-    : JOB_TITLES;
+  // availableUnits / availableJobTitles intentionally omitted; Dashboard is sample-only.
 
   return (
     <Layout title="Dashboard" subtitle="Performance management overview">

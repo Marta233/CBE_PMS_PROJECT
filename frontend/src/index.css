@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@300;400;500;600&family=Manrope:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -112,4 +112,179 @@ html.dark .select-field {
 
 html.dark .label {
   color: #94a3b8;
+}
+
+/* ── Login: liquid morphic surface ── */
+.login-glass {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(137, 45, 143, 0.12) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 8px 32px rgba(32, 9, 34, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+}
+
+.login-glass-soft {
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 1px solid rgba(232, 201, 150, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* White contrast panel for sign-in */
+.login-panel-white {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.97) 0%,
+    rgba(252, 248, 253, 0.96) 55%,
+    rgba(255, 255, 255, 0.94) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 20px 50px rgba(32, 9, 34, 0.28),
+    0 4px 16px rgba(137, 45, 143, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.login-panel-white .login-field {
+  border: 1px solid rgba(137, 45, 143, 0.14);
+  background: #f8f5f9;
+  color: #1e293b;
+}
+
+.login-panel-white .login-field::placeholder {
+  color: #94a3b8;
+}
+
+.login-panel-white .login-field:focus {
+  border-color: rgba(137, 45, 143, 0.45);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(137, 45, 143, 0.14);
+}
+
+.login-panel-white .login-demo-chip {
+  border: 1px solid rgba(137, 45, 143, 0.1);
+  background: #faf7fb;
+  color: #1e293b;
+}
+
+.login-panel-white .login-demo-chip:hover:not(:disabled) {
+  background: #f3ebf5;
+  border-color: rgba(137, 45, 143, 0.28);
+}
+
+.login-panel-white .login-demo-chip.is-active {
+  background: rgba(137, 45, 143, 0.1);
+  border-color: rgba(137, 45, 143, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(137, 45, 143, 0.12);
+}
+
+.login-field {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-field::placeholder {
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.login-field:focus {
+  border-color: rgba(212, 165, 116, 0.55);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 3px rgba(196, 137, 74, 0.18);
+}
+
+.login-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.9rem 1.25rem;
+  border-radius: 0.95rem;
+  border: none;
+  font-size: 0.925rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #a23ba8 0%, #892d8f 45%, #6e2473 100%);
+  box-shadow:
+    0 10px 28px rgba(137, 45, 143, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.login-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow:
+    0 14px 32px rgba(137, 45, 143, 0.55),
+    0 0 24px rgba(212, 165, 116, 0.15);
+}
+
+.login-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-demo-chip {
+  text-align: left;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.login-demo-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(212, 165, 116, 0.35);
+  transform: translateY(-1px);
+}
+
+.login-demo-chip.is-active {
+  background: rgba(137, 45, 143, 0.35);
+  border-color: rgba(212, 165, 116, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(232, 201, 150, 0.2);
+}
+
+/* Sidebar brand text — slide when it doesn't fit */
+.brand-slide {
+  display: inline-block;
+  animation: brand-slide 10s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes brand-slide {
+  0%, 18% {
+    transform: translateX(0);
+  }
+  45%, 62% {
+    transform: translateX(var(--brand-shift, -40%));
+  }
+  90%, 100% {
+    transform: translateX(0);
+  }
 }

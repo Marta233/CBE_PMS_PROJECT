@@ -14,3 +14,7 @@ celery[redis]
 redis
 httpx
 nltk
+sqlalchemy
+pyjwt
+passlib[bcrypt]
+python-multipart
