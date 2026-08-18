@@ -14,44 +14,32 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+
 class PMSVectorStore:
 
     def __init__(self, embedding_model: str, index_path: Path):
 
         self.embedding_model = embedding_model
         self.index_path = Path(index_path)
+        self._bge_query_prefix = ""
 
         logger.info(f"\n🤖 Loading embedding model: {embedding_model}")
 
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=embedding_model
-        )
+        embed_kwargs = {"model_name": embedding_model}
+        if "bge" in embedding_model.lower():
+            embed_kwargs["encode_kwargs"] = {"normalize_embeddings": True}
+            self._bge_query_prefix = BGE_QUERY_PREFIX
+
+        self.embeddings = HuggingFaceEmbeddings(**embed_kwargs)
 
         self.vectorstore = None
 
-    # =========================================================
-    # LOAD DOCUMENTS
-    # =========================================================
-
-    def load_json_documents(self, json_path: Path) -> List[Document]:
-
-        logger.info(f"\n📂 Loading documents: {json_path.name}")
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            raw_docs = json.load(f)
-
-        documents = []
-
-        for item in raw_docs:
-            documents.append(
-                Document(
-                    page_content=item["text"],
-                    metadata=item["metadata"]
-                )
-            )
-
-        logger.info(f"  ✅ Loaded {len(documents)} documents")
-        return documents
+    def _prepare_query(self, query: str) -> str:
+        if self._bge_query_prefix:
+            return f"{self._bge_query_prefix}{query}"
+        return query
 
     # =========================================================
     # CREATE VECTORSTORE
@@ -97,11 +85,18 @@ class PMSVectorStore:
         logger.info("  ✅ FAISS index loaded")
         return self.vectorstore
 
+    def similarity_search_with_score(self, query: str, k: int = 4):
+        if self.vectorstore is None:
+            raise ValueError("Vectorstore not loaded")
+        return self.vectorstore.similarity_search_with_score(
+            self._prepare_query(query), k=k
+        )
+
     # =========================================================
     # 🔥 SEARCH (MAIN IMPROVED LOGIC)
     # =========================================================
 
-    def search(self, query: str, k: int = 5):
+    def search(self, query: str, k: int = 10):
 
         if self.vectorstore is None:
             raise ValueError("Vectorstore not loaded")
@@ -133,14 +128,14 @@ class PMSVectorStore:
                 self.embeddings
             )
 
-            results = temp_vectorstore.similarity_search(query, k=k)
+            results = temp_vectorstore.similarity_search(self._prepare_query(query), k=k)
 
             return results
 
         # =========================================================
         # CASE 2: fallback (no department detected)
         # =========================================================
-        return self.vectorstore.similarity_search(query, k=k)
+        return self.vectorstore.similarity_search(self._prepare_query(query), k=k)
 
     def extract_department(self, query: str) -> Optional[str]:
 
