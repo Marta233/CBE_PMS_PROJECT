@@ -11,18 +11,10 @@ type DemoUser = {
 };
 
 const DEMO_USERS: DemoUser[] = [
-  // { label: 'Manager (Card Banking)', short: 'Manager', email: 'manager.card@cbe.et', roleHint: 'Generate unit objectives' },
+  { label: 'Manager (Card Banking)', short: 'Manager', email: 'manager.card@cbe.et', roleHint: 'Generate unit objectives' },
   { label: 'Director (Card Banking)', short: 'Director', email: 'director.card@cbe.et', roleHint: 'Approve Card Banking' },
-  // { label: 'Manager (Recon)', short: 'Manager', email: 'manager.recon@cbe.et', roleHint: 'Reconciliation objectives' },
+  { label: 'Manager (Recon)', short: 'Manager', email: 'manager.recon@cbe.et', roleHint: 'Reconciliation objectives' },
   { label: 'Unit Director (Recon)', short: 'Director', email: 'director.recon@cbe.et', roleHint: 'Approve Recon unit' },
-  // { label: 'Manager (Merchant Management)', short: 'Manager', email: 'manager.merchant@cbe.et', roleHint: 'Merchant management objectives' },
-  // { label: 'Manager (Agent Management)', short: 'Manager', email: 'manager.agent@cbe.et', roleHint: 'Agent management objectives' },
-  // { label: 'Manager (Digital Partners)', short: 'Manager', email: 'manager.digitalpartners@cbe.et', roleHint: 'Digital partners objectives' },
-  { label: 'Director (Merchant & Agent Mgmt)', short: 'Director', email: 'director.merchant@cbe.et', roleHint: 'Approve Merchant & Agent Mgmt' },
-  // { label: 'Manager (Mobile & Internet Banking)', short: 'Manager', email: 'manager.mobilebanking@cbe.et', roleHint: 'Mobile & internet banking objectives' },
-  { label: 'Director (Mobile & Internet Banking)', short: 'Director', email: 'director.mobilebanking@cbe.et', roleHint: 'Approve Mobile & Internet Banking' },
-  // { label: 'Manager (Mobile Money)', short: 'Manager', email: 'manager.mobilemoney@cbe.et', roleHint: 'Mobile money objectives' },
-  { label: 'Director (Mobile Money)', short: 'Director', email: 'director.mobilemoney@cbe.et', roleHint: 'Approve Mobile Money' },
   { label: 'VP', short: 'VP', email: 'vp.digital@cbe.et', roleHint: 'Division sign-off → PMS' },
   { label: 'PMS Department', short: 'PMS', email: 'pms@cbe.et', roleHint: 'Official register' },
   { label: 'HR Director', short: 'HR', email: 'hr.director@cbe.et', roleHint: 'Cross-division oversight' },

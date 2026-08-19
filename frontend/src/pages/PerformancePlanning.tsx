@@ -114,8 +114,11 @@ interface JobStatusResponse {
 }
 
 const POLL_INTERVAL_MS = 2000;
-// Keep this comfortably above worst-case Step 3 LLM runtime.
-const POLL_TIMEOUT_MS = 25 * 60 * 1000;
+// Backend runs 3 sequential LLM steps (draft, metrics, appraisal), each with
+// its own timeout (see config.py: OLLAMA_TIMEOUT_SECONDS / STEP3_OLLAMA_TIMEOUT_SECONDS,
+// default 600s each = 1800s / 30 min worst case). Keep this comfortably above
+// that combined worst case, not just Step 3 alone.
+const POLL_TIMEOUT_MS = 40 * 60 * 1000;
 
 interface MeResponse {
   id: number;
@@ -383,7 +386,20 @@ async function callAPI(
     partial: BackendResponse,
     progress?: JobStatusResponse['progress'],
   ) => void,
+  onJobAccepted?: (pollUrl: string) => void,
+  resumePollUrl?: string,
 ): Promise<{ objectives: LLMObjective[]; employeeProfile: EmployeeProfile; warning?: string }> {
+  if (resumePollUrl) {
+    const { data, warning } = await pollJobUntilDone(resumePollUrl, (partial, progress) => {
+      onProgress?.(partial, progress);
+    });
+    return {
+      objectives:      data.objectives.map((o, i) => fromBackend(o, i)),
+      employeeProfile: data.employee_profile,
+      warning,
+    };
+  }
+
   let res: Response;
   try {
     res = await fetch(`${API_URL}/api/generate`, {
@@ -402,6 +418,7 @@ async function callAPI(
 
   if (res.status === 202) {
     const accepted: JobAcceptedResponse = await res.json();
+    onJobAccepted?.(accepted.poll_url);
     const { data, warning } = await pollJobUntilDone(accepted.poll_url, (partial, progress) => {
       onProgress?.(partial, progress);
     });
@@ -436,40 +453,61 @@ function downloadCSV(
   meta: ObjectiveSet | null,
   profile: EmployeeProfile | null,
 ) {
-  const header = [
-    '#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category',
-    'Tracking Source', 'Time Frame', 'BSC KPI', 'BSC Strategic Objective',
-    'LOS Alignment', 'Rating 5', 'Rating 4', 'Rating 3', 'Rating 2', 'Rating 1',
-  ];
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const body = rows.map((r, i) => {
-    const a = r.appraisal_logic ?? EMPTY_APPRAISAL;
-    return [
-      i + 1,
-      esc(r.objective),
-      esc(r.measure),
-      esc(r.target),
-      r.weight_percent,
-      esc(r.category),
-      esc(r.tracking_source),
-      esc(r.time_frame),
-      esc(r.bsc_kpi ?? ''),
-      esc(r.bsc_strategic_objective ?? ''),
-      esc(r.los_alignment ?? ''),
-      esc(a.rating_5), esc(a.rating_4), esc(a.rating_3), esc(a.rating_2), esc(a.rating_1),
-    ];
+  const OBJ_COLS = 6;       // #, Objective, Measure, Target, Weight (%), Category
+  const APPRAISAL_COLS = 7; // #, Objective, Rating 5..Rating 1
+
+  const esc = (s: string) => `"${(s ?? '').replace(/"/g, '""')}"`;
+  const pad = (cells: (string | number)[], width: number): (string | number)[] => {
+    const out = [...cells];
+    while (out.length < width) out.push('');
+    return out;
+  };
+  const row = (cells: (string | number)[], width: number) => pad(cells, width).join(',');
+
+  const now = new Date();
+  const datePart = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+  const timePart = now.toTimeString().split(' ')[0];
+
+  const lines: string[] = [];
+
+  if (meta) {
+    lines.push(row(['Division', esc(meta.division)], OBJ_COLS));
+    lines.push(row(['Department', esc(meta.department)], OBJ_COLS));
+    lines.push(row(['Unit', esc(meta.unit)], OBJ_COLS));
+    lines.push(row(['Job Title', esc(meta.job_title)], OBJ_COLS));
+  }
+  if (profile?.grade_band) {
+    lines.push(row(['Grade Band', esc(formatGradeBand(profile.grade_band))], OBJ_COLS));
+  }
+  lines.push(row(['Generated', datePart, timePart], OBJ_COLS));
+  lines.push(row([''], OBJ_COLS));
+
+  lines.push(row(['#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category'], OBJ_COLS));
+  rows.forEach((r, i) => {
+    lines.push(row([
+      i + 1, esc(r.objective), esc(r.measure), esc(r.target), r.weight_percent, esc(r.category),
+    ], OBJ_COLS));
   });
-  const metaLines = [
-    meta ? `Division,${meta.division}` : '',
-    meta ? `Department,${meta.department}` : '',
-    meta ? `Unit,${meta.unit}` : '',
-    meta ? `Job Title,${meta.job_title}` : '',
-    profile?.grade_band ? `Grade Band,${formatGradeBand(profile.grade_band)}` : '',
-    `Generated,${new Date().toLocaleString()}`,
-    '',
-  ].filter(Boolean).join('\n');
-  const csv  = metaLines + [header.join(','), ...body.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+  lines.push(row([''], OBJ_COLS));
+  lines.push(row(['Appraisal'], OBJ_COLS));
+  lines.push(row([
+    '#', 'Objective',
+    ...APPRAISAL_RATINGS.map(rt => `Rating ${rt.label} - ${rt.title}`),
+  ], APPRAISAL_COLS));
+  rows.forEach((r, i) => {
+    const a = r.appraisal_logic ?? EMPTY_APPRAISAL;
+    lines.push(row([
+      i + 1, esc(r.objective),
+      esc(a.rating_5), esc(a.rating_4), esc(a.rating_3), esc(a.rating_2), esc(a.rating_1),
+    ], APPRAISAL_COLS));
+  });
+
+  const csv = lines.join('\n');
+  // Prepend a UTF-8 BOM. Without it, Excel assumes the system codepage
+  // (e.g. Windows-1252) instead of UTF-8 and renders multi-byte characters
+  // like em dashes (—) as mojibake (â€”).
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a'); a.href = url; a.download = 'objectives.csv'; a.click();
   URL.revokeObjectURL(url);
@@ -858,6 +896,10 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
   const [genError,      setGenError]      = useState<string | null>(null);
   const [genProgress,   setGenProgress]   = useState<string | null>(null);
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>(null);
+  // Tracks the poll_url of a job that timed out on the client but may still
+  // be running on the server, keyed by position id. Retry resumes this job
+  // instead of submitting a duplicate /api/generate request.
+  const pendingJobRef = useRef<Record<number, string>>({});
 
   const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(null);
   const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile | null>(null);
@@ -1116,7 +1158,7 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
     }
   }
 
-  async function handleGenerate(isRegen = false) {
+  async function handleGenerate(isRegen = false, isRetry = false) {
     if (!canGenerate || generateLocked) return;
     const pos = selectedPosition;
     if (!pos || selectedPositionId === '') {
@@ -1131,12 +1173,13 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
     const effectiveDivision = division;
     const effectiveDepartment = department;
     const effectiveUnit = unit;
+    const resumeUrl = isRetry ? pendingJobRef.current[genPosId] : undefined;
 
     setGenerating(true);
     setGeneratingPositionId(genPosId);
     setContentDirty(true);
     setGenError(null);
-    setGenProgress(null);
+    setGenProgress(resumeUrl ? 'Reconnecting to your in-progress generation…' : null);
     setPipelineStage(null);
     setJobTitle(effectiveJobTitle);
 
@@ -1170,7 +1213,10 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
             return { ...prev, [genPosId]: merged };
           });
         },
+        (pollUrl) => { pendingJobRef.current[genPosId] = pollUrl; },
+        resumeUrl,
       );
+      delete pendingJobRef.current[genPosId];
       if (rows.length !== effectiveNumObjectives) {
         throw new Error(
           `Expected ${effectiveNumObjectives} objectives but received ${rows.length}. Please try again.`,
@@ -1202,6 +1248,9 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
       }
     } catch (err) {
       console.error('Objective generation failed:', err);
+      // Keep pendingJobRef intact on failure — the job may still be running
+      // server-side, and the Retry button should reconnect to it rather
+      // than submit a duplicate request.
       const message = err instanceof Error ? err.message : 'We could not generate objectives this time. Please try again.';
       if (selectedPositionIdRef.current === genPosId) {
         setGenError(message);
@@ -1721,7 +1770,7 @@ export default function PerformancePlanning({ mode = 'manager' }: { mode?: 'mana
               <span>{genError}</span>
             </div>
             <button
-              onClick={() => handleGenerate(objectives.length > 0)}
+              onClick={() => handleGenerate(objectives.length > 0, true)}
               disabled={generateLocked || !canGenerate}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
               style={{ backgroundColor: '#892d8f' }}>

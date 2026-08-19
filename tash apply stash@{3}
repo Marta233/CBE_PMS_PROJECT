@@ -1,0 +1,10 @@
+ Back_End/scripts/API/routers/generate.py           |   8 [32m+[m[31m-[m
+ Back_End/scripts/Data_Ingestion/bsc/bsc_loader.py  |   2 [31m-[m
+ Back_End/scripts/config.py                         |   2 [32m+[m[31m-[m
+ Back_End/scripts/llm/pipeline.py                   | 181 [32m++++++++++[m[31m--[m
+ Back_End/scripts/llm/prompts/builder.py            |   6 [31m-[m
+ .../scripts/llm/prompts/fragments/step1_rules.txt  | 100 [32m++++++[m[31m-[m
+ .../scripts/llm/prompts/fragments/step2_rules.txt  |  66 [32m++++[m[31m-[m
+ Back_End/scripts/llm/validator.py                  | 221 [32m++++++++++++++[m[31m-[m
+ frontend/src/pages/PerformancePlanning.tsx         | 310 [32m+++++++++++++++++++[m[31m--[m
+ 9 files changed, 802 insertions(+), 94 deletions(-)

@@ -35,7 +35,12 @@ from .llm_client import LLMUnavailableError, chat_json, check_llm_available
 from .json_utils import build_repair_prompt, parse_llm_json
 from .prompts import build_step1_prompt, build_step2_prompt, build_step3_prompt, build_all_prompts
 from .prompts.loader import step1_json_example, step2_json_example, step3_json_example
-from .validator import normalize_objectives, sum_weights, validate_objectives
+from .validator import (
+    normalize_objectives,
+    sum_weights,
+    validate_objectives,
+    validate_step1_objectives,
+)
 
 
 DEFAULT_MODEL = OLLAMA_MODEL
@@ -322,6 +327,16 @@ def generate_objectives(
                 f"Step 1 returned {len(drafts)} drafts, expected at least {num_drafts}."
             )
         set_cached_step1_drafts(s1_key, drafts)
+
+    # Validate Step 1 output against step1_rules.txt (non-fatal — logged and
+    # surfaced to callers, never blocks Step 2 from running).
+    # If you separately have the exact BSC KPI label list (not just the
+    # formatted bsc_context text), pass it as context["bsc_kpis"] to also
+    # verify each draft's bsc_kpi is copied verbatim from that list.
+    # step1_warnings = validate_step1_objectives(drafts, bsc_kpis=context.get("bsc_kpis"))
+    # if step1_warnings:
+    #     _step_log(f"  Step 1 warnings: {step1_warnings}")
+
     if progress_callback:
         preview_objectives: list[dict[str, Any]] = []
         for d in drafts:
@@ -345,6 +360,7 @@ def generate_objectives(
             {
                 "stage": "step1_draft",
                 "message": "Draft objectives generated. Step 2 is in progress.",
+                # "step1_warnings": step1_warnings,
                 "partial_result": {
                     "employee_profile": {
                         "division": profile.division,
@@ -500,6 +516,7 @@ def generate_objectives(
                 "step3": len(build_step3_prompt(profile, objectives)[1]),
             },
             "warnings": warnings,
+            # "step1_warnings": step1_warnings,
         },
     }
 

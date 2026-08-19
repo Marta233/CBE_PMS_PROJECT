@@ -110,7 +110,6 @@ export const UNITS: Record<string, string[]> = {
 
   // Department 2: Digital Banking Reconciliation and Dispute Management
   'Digital Banking Reconciliation and Dispute Management': [
-    'Digital Banking Reconciliation and Dispute Management',
     'Merchant and Agent Reconciliation',
     'Mobile and Internet Banking Reconciliation',
     'International Card Transaction Reconciliation',
@@ -120,7 +119,6 @@ export const UNITS: Record<string, string[]> = {
 
   // Department 3: Merchant and Agent Management
   'Merchant and Agent Management': [
-    'Merchant and Agent Management',
     'Merchant Management',
     'Agent Management',
     'Digital Partners Relationship',
@@ -128,20 +126,17 @@ export const UNITS: Record<string, string[]> = {
 
   // Department 4: Mobile and Internet Banking
   'Mobile and Internet Banking': [
-    'Mobile and Internet Banking',
     'Mobile Banking Business',
     'Internet Banking Business',
   ],
 
   // Department 5: Mobile Money
   'Mobile Money': [
-    'Mobile Money',
     'Mobile Money Business',
   ],
 
   // Department 6: Card Banking
   'Card Banking': [
-    'Card Banking',
     'ATM Operations Support',
     'Card Banking Business',
     'Card Production and Distribution',

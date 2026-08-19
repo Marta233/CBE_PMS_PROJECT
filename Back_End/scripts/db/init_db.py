@@ -203,6 +203,59 @@ def _ensure_card_banking_units(db: Session):
     return division, dept, unit
 
 
+def _find_department(db: Session, department: str):
+    """Department lookup within Digital Banking."""
+    return db.query(OrgUnit).filter(
+        OrgUnit.unit_type == UnitType.department,
+        OrgUnit.division == "Digital Banking",
+        OrgUnit.name == department,
+    ).one_or_none()
+
+
+def _find_unit(db: Session, department: str, unit_name: str):
+    """Unit lookup within a Digital Banking department."""
+    return db.query(OrgUnit).filter(
+        OrgUnit.unit_type == UnitType.unit,
+        OrgUnit.division == "Digital Banking",
+        OrgUnit.department == department,
+        OrgUnit.name == unit_name,
+    ).one_or_none()
+
+
+# Additional departments that get a director + one manager per unit.
+# The director is scoped to the whole department (sees every unit in it).
+# Each manager is scoped to a single unit within that department.
+# VP/PMS/HR already cover these since their scope is division-wide / global.
+_EXTRA_DEPARTMENTS = [
+    (
+        "Merchant and Agent Management",
+        [
+            ("Merchant Management", "manager.merchant@cbe.et", "Manager (Merchant Management)"),
+            ("Agent Management", "manager.agent@cbe.et", "Manager (Agent Management)"),
+            ("Digital Partners Relationship", "manager.digitalpartners@cbe.et", "Manager (Digital Partners Relationship)"),
+        ],
+        "director.merchant@cbe.et",
+        "Director (Merchant and Agent Mgmt)",
+    ),
+    (
+        "Mobile and Internet Banking",
+        [
+            ("Mobile Banking Business", "manager.mobilebanking@cbe.et", "Manager (Mobile Banking)"),
+        ],
+        "director.mobilebanking@cbe.et",
+        "Director (Mobile and Internet Banking)",
+    ),
+    (
+        "Mobile Money",
+        [
+            ("Mobile Money Business", "manager.mobilemoney@cbe.et", "Manager (Mobile Money)"),
+        ],
+        "director.mobilemoney@cbe.et",
+        "Director (Mobile Money)",
+    ),
+]
+
+
 def _seed_demo_users(db: Session, demo_password: str) -> None:
     manager = _create_user(db, "manager.recon@cbe.et", "Manager (Recon)", demo_password)
     director = _create_user(db, "director.recon@cbe.et", "Unit Director (Recon)", demo_password)
@@ -229,6 +282,17 @@ def _seed_demo_users(db: Session, demo_password: str) -> None:
         _assign_role(db, vp.id, UserRole.vp, ScopeType.division, card_division.id)
     _assign_role(db, pms.id, UserRole.pms, ScopeType.global_scope, None)
     _assign_role(db, hr.id, UserRole.hr_director, ScopeType.global_scope, None)
+
+    for dept_name, unit_managers, dir_email, dir_label in _EXTRA_DEPARTMENTS:
+        dept_unit = _find_department(db, dept_name)
+        director_extra = _create_user(db, dir_email, dir_label, demo_password)
+        if dept_unit is not None:
+            _assign_role(db, director_extra.id, UserRole.unit_director, ScopeType.department, dept_unit.id)
+        for unit_name, mgr_email, mgr_label in unit_managers:
+            unit = _find_unit(db, dept_name, unit_name)
+            mgr = _create_user(db, mgr_email, mgr_label, demo_password)
+            if unit is not None:
+                _assign_role(db, mgr.id, UserRole.manager, ScopeType.unit, unit.id)
 
 
 def _assign_role(db: Session, user_id: int, role: UserRole, scope_type: ScopeType, scope_id: int | None) -> None:
@@ -342,4 +406,3 @@ def ensure_demo_users() -> None:
         cleanup_bank_trainee_on_vp_sets(db)
         backfill_position_statuses(db)
         db.commit()
-
