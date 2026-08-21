@@ -1,9 +1,10 @@
 // PerformancePlanning.tsx — Table shows EXACTLY what LLM returns, per-row edit modal
 
-import { useState, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import {
   Sparkles, Plus, ChevronDown, ChevronRight, Save, Edit2, Trash2,
   RefreshCw, AlertCircle, Target, X, Check, Download, Scale, Info,
+  FolderOpen, Clock, Trash,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import {
@@ -375,6 +376,98 @@ function downloadJSON(
   URL.revokeObjectURL(url);
 }
 
+// ── Local persistence (browser localStorage) ────────────────────────────────
+// Two layers:
+//  1. A single "working draft" that auto-saves on every change, so a page
+//     refresh or accidental tab close never loses in-progress work.
+//  2. A list of explicitly "Saved" sets (one entry per Save & Activate),
+//     so past generations stay available to reopen later on this device.
+const DRAFT_STORAGE_KEY = 'pms:performance-planning:draft:v1';
+const SAVED_SETS_STORAGE_KEY = 'pms:performance-planning:saved-sets:v1';
+
+interface PersistedDraft {
+  division: string;
+  department: string;
+  unit: string;
+  jobTitle: string;
+  jobGrade: string;
+  numObjectives: number;
+  currentSet: ObjectiveSet | null;
+  employeeProfile: EmployeeProfile | null;
+  objectives: LLMObjective[];
+}
+
+interface SavedObjectiveSet {
+  id: string;
+  meta: ObjectiveSet;
+  employeeProfile: EmployeeProfile | null;
+  objectives: LLMObjective[];
+  savedAt: string;
+}
+
+function safeParse<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function loadDraftFromStorage(): PersistedDraft | null {
+  if (typeof window === 'undefined') return null;
+  return safeParse<PersistedDraft>(localStorage.getItem(DRAFT_STORAGE_KEY));
+}
+
+function saveDraftToStorage(draft: PersistedDraft) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch (err) {
+    console.warn('Could not save draft locally:', err);
+  }
+}
+
+function clearDraftStorage() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function loadSavedSets(): SavedObjectiveSet[] {
+  if (typeof window === 'undefined') return [];
+  const parsed = safeParse<SavedObjectiveSet[]>(localStorage.getItem(SAVED_SETS_STORAGE_KEY));
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function persistSavedSets(sets: SavedObjectiveSet[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SAVED_SETS_STORAGE_KEY, JSON.stringify(sets));
+  } catch (err) {
+    console.warn('Could not persist saved sets locally:', err);
+  }
+}
+
+function upsertSavedSet(set: SavedObjectiveSet): SavedObjectiveSet[] {
+  const existing = loadSavedSets();
+  const idx = existing.findIndex(s => s.id === set.id);
+  const next = idx >= 0
+    ? existing.map((s, i) => (i === idx ? set : s))
+    : [set, ...existing];
+  persistSavedSets(next);
+  return next;
+}
+
+function removeSavedSet(id: string): SavedObjectiveSet[] {
+  const next = loadSavedSets().filter(s => s.id !== id);
+  persistSavedSets(next);
+  return next;
+}
+
 type ObjectiveFormData = {
   objective:       string;
   measure:         string;
@@ -691,24 +784,110 @@ function AppraisalExpandPanel({
   );
 }
 
+// ── Saved sets panel (local device only) ────────────────────────────────────
+function SavedSetsPanel({
+  sets, onLoad, onDelete, onClose,
+}: {
+  sets:     SavedObjectiveSet[];
+  onLoad:   (set: SavedObjectiveSet) => void;
+  onDelete: (id: string) => void;
+  onClose:  () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white"
+              style={{ backgroundColor: '#892d8f' }}>
+              <FolderOpen size={13} />
+            </div>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Saved on this device
+            </h2>
+          </div>
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-4">
+          {sets.length === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-8">
+              Nothing saved yet. Generate objectives, then click "Save & Activate" to keep a copy here.
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {sets.map(s => (
+                <div key={s.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 hover:border-purple-200 dark:hover:border-purple-800 transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                      {s.meta.job_title} — {s.meta.unit || s.meta.department}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                      <Clock size={11} />
+                      {new Date(s.savedAt).toLocaleString()} · {s.objectives.length} objectives
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button onClick={() => onLoad(s)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
+                      style={{ backgroundColor: '#892d8f' }}>
+                      Load
+                    </button>
+                    <button onClick={() => onDelete(s.id)}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <Trash size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 export default function PerformancePlanning() {
-  const [division,      setDivision]      = useState('');
-  const [department,    setDepartment]    = useState('');
-  const [unit,          setUnit]          = useState('');
-  const [jobTitle,      setJobTitle]      = useState('');
-  const [jobGrade,      setJobGrade]      = useState('');
-  const [numObjectives, setNumObjectives] = useState(5);
+  // Restore the last working draft (if any) synchronously on first render,
+  // so a page refresh never silently loses in-progress generation results.
+  const initialDraft = loadDraftFromStorage();
+
+  const [division,      setDivision]      = useState(initialDraft?.division ?? '');
+  const [department,    setDepartment]    = useState(initialDraft?.department ?? '');
+  const [unit,          setUnit]          = useState(initialDraft?.unit ?? '');
+  const [jobTitle,      setJobTitle]      = useState(initialDraft?.jobTitle ?? '');
+  const [jobGrade,      setJobGrade]      = useState(initialDraft?.jobGrade ?? '');
+  const [numObjectives, setNumObjectives] = useState(initialDraft?.numObjectives ?? 5);
   const [generating,    setGenerating]    = useState(false);
   const [genError,      setGenError]      = useState<string | null>(null);
   const [genProgress,   setGenProgress]   = useState<string | null>(null);
 
-  const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(null);
-  const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile | null>(null);
-  const [objectives,  setObjectives]  = useState<LLMObjective[]>([]);
+  const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(initialDraft?.currentSet ?? null);
+  const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile | null>(initialDraft?.employeeProfile ?? null);
+  const [objectives,  setObjectives]  = useState<LLMObjective[]>(initialDraft?.objectives ?? []);
   const [editingRow,  setEditingRow]  = useState<LLMObjective | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const [savedSets, setSavedSets] = useState<SavedObjectiveSet[]>(() => loadSavedSets());
+  const [showSavedPanel, setShowSavedPanel] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+
+  // Auto-save the working draft locally on every change, so nothing is lost
+  // on refresh/close. This is separate from the explicit "Saved sets" list.
+  useEffect(() => {
+    saveDraftToStorage({
+      division, department, unit, jobTitle, jobGrade, numObjectives,
+      currentSet, employeeProfile, objectives,
+    });
+  }, [division, department, unit, jobTitle, jobGrade, numObjectives, currentSet, employeeProfile, objectives]);
 
   const availableDepartments = division   ? DEPARTMENTS[division]           || [] : [];
   const availableUnits       = department ? UNITS[department]               || [] : [];
@@ -795,6 +974,56 @@ export default function PerformancePlanning() {
     setShowAddModal(true);
   }
 
+  // Persist the current set to the local "Saved sets" list (separate from
+  // the auto-saved working draft) and mark it active.
+  function handleSaveActivate() {
+    if (!currentSet) return;
+    const updatedMeta: ObjectiveSet = { ...currentSet, status: 'active' };
+    setCurrentSet(updatedMeta);
+
+    const saved: SavedObjectiveSet = {
+      id: updatedMeta.id,
+      meta: updatedMeta,
+      employeeProfile,
+      objectives,
+      savedAt: new Date().toISOString(),
+    };
+    setSavedSets(upsertSavedSet(saved));
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 2500);
+  }
+
+  // Reopen a previously saved set from this device.
+  function handleLoadSavedSet(set: SavedObjectiveSet) {
+    setCurrentSet(set.meta);
+    setEmployeeProfile(set.employeeProfile);
+    setObjectives(set.objectives);
+    setDivision(set.meta.division);
+    setDepartment(set.meta.department);
+    setUnit(set.meta.unit);
+    setJobTitle(set.meta.job_title);
+    setNumObjectives(set.meta.num_objectives);
+    setExpandedRows(new Set());
+    setGenError(null);
+    setShowSavedPanel(false);
+  }
+
+  function handleDeleteSavedSet(id: string) {
+    setSavedSets(removeSavedSet(id));
+  }
+
+  // Start a fresh session: clears the on-screen table AND the auto-saved
+  // draft, so the old draft doesn't reappear on the next visit.
+  function handleNewSession() {
+    setCurrentSet(null);
+    setEmployeeProfile(null);
+    setObjectives([]);
+    setExpandedRows(new Set());
+    setGenError(null);
+    setGenProgress(null);
+    clearDraftStorage();
+  }
+
   const totalWeight = objectives.reduce((s, o) => s + o.weight_percent, 0);
   const weightOk    = Math.abs(totalWeight - 100) <= 1;
   const editingIndex = editingRow ? objectives.findIndex(o => o.id === editingRow.id) : -1;
@@ -805,11 +1034,25 @@ export default function PerformancePlanning() {
 
       {/* ── Config panel ──────────────────────────────────────────────────── */}
       <div className="card p-6 mb-6">
-        <div className="flex items-center gap-2 mb-5">
-          <Sparkles size={18} style={{ color: '#892d8f' }} />
-          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
-            Configure Objective Generation
-          </h2>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} style={{ color: '#892d8f' }} />
+            <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">
+              Configure Objective Generation
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            {(objectives.length > 0 || currentSet) && (
+              <button onClick={handleNewSession}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                <Plus size={13} className="rotate-45" />New session
+              </button>
+            )}
+            <button onClick={() => setShowSavedPanel(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+              <FolderOpen size={13} />Saved{savedSets.length > 0 ? ` (${savedSets.length})` : ''}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -977,10 +1220,11 @@ export default function PerformancePlanning() {
                 <Download size={14}/>JSON
               </button>
               <button
-                onClick={() => setCurrentSet(s => s ? { ...s, status: 'active' } : s)}
+                onClick={handleSaveActivate}
                 className="inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors"
                 style={{ backgroundColor: '#892d8f' }}>
-                <Save size={14}/>Save & Activate
+                {justSaved ? <Check size={14}/> : <Save size={14}/>}
+                {justSaved ? 'Saved' : 'Save & Activate'}
               </button>
             </div>
           </div>
@@ -1176,6 +1420,14 @@ export default function PerformancePlanning() {
           isCriticalRow={editingIndex === 0}
           onSave={saveEdit}
           onClose={() => setEditingRow(null)}
+        />
+      )}
+      {showSavedPanel && (
+        <SavedSetsPanel
+          sets={savedSets}
+          onLoad={handleLoadSavedSet}
+          onDelete={handleDeleteSavedSet}
+          onClose={() => setShowSavedPanel(false)}
         />
       )}
     </Layout>
