@@ -97,8 +97,8 @@ interface JobStatusResponse {
   detail?: Record<string, unknown>;
 }
 
-const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 10 * 60 * 1000;
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 120 * 60 * 1000;
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));

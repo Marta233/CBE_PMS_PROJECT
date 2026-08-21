@@ -170,8 +170,8 @@ def chat_json(
     user: str,
     *,
     model: str | None = None,
-    temperature: float = 0.3,
-    num_predict: int = 2048,
+    temperature: float = 0.2,
+    num_predict: int = 800,
     seed: int | None = None,
     label: str | None = None,
 ) -> str:

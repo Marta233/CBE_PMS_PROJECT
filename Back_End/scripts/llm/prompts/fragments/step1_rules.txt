@@ -1,25 +1,91 @@
 STEP 1 RULES — draft text and BSC/LOS mapping only
 
-Do NOT assign weight_percent, measure, target, category, tracking_source, time_frame,
-or appraisal_logic in this step.
+SCOPE: this step drafts objective TEXT and its BSC/LOS mapping ONLY.
+Do NOT assign weight_percent, measure, target, category, tracking_source,
+time_frame, or appraisal_logic in this step. Those fields are drafted in a
+later step and must not appear — or be implied — anywhere in Step 1 output.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE REQUIREMENTS — every draft must satisfy all three
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Every draft must cite at least one BSC KPI from the provided BSC context.
+2. Every draft must trace to at least one LOS goal, or mark los_alignment
+   as N/A if none applies.
+3. Every draft must fit the employee's actual JD responsibilities and
+   their grade band — never a responsibility outside the JD, and never a
+   goal that belongs to a higher grade band.
 
-2. Every draft must trace to at least one LOS goal (or mark N/A).
+Rule 1 below is exactly how to satisfy all three for every KPI — it isn't
+a separate, softer process.
 
-3. Every draft must fit the employee's JD responsibilities and grade band.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 1 — HOW TO DRAFT (one draft per KPI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+A. List every KPI from the BSC context, in the order it appears.
 
-4. SMART format: action verb + measurable outcome + quarterly scope.
+B. For each KPI, check the JD context AND the LOS context independently
+   for an explicit or clearly implied match to this KPI:
+     - JD matches (LOS may too)  → draft from BSC + JD, specific to this
+       job's actual responsibility. Fold in the LOS goal too if it matched.
+     - LOS matches, JD doesn't   → draft from BSC + LOS, specific to the
+       LOS goal this KPI supports.
+     - Neither matches           → draft from the BSC KPI alone (strategic
+       objective, KPI name, measurement). Don't force a JD/LOS link that
+       isn't there.
+   Never copy the KPI text verbatim into the objective. Set bsc_kpi to
+   this KPI's exact label from the BSC context. Every draft must trace to
+   at least one LOS goal it matched, or mark los_alignment as N/A.
 
-5. All drafts are quarterly unless TOR specifies monthly.
+C. If BSC KPIs run out before draft slots do, draft the remaining
+   objectives from the JD context's other core responsibilities, or from
+   LOS goals not yet covered if the JD context is exhausted. Every
+   objective — including these — must still anchor to a BSC KPI per step B.
 
-6. No duplicate BSC KPIs or overlapping scope across drafts.
+D. NO DUPLICATES, NO OVERLAP: each bsc_kpi is used in exactly one draft,
+   and no two drafts describe the same underlying responsibility in
+   different words. 
 
-{document_split_note}
+E. SELF-CHECK before finalizing: does each draft's text actually match the
+   subject of its bsc_strategic_objective?
 
-{no_proposal_note}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 2 — FORMAT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2a. SMART, single-focus. Start with an action verb; describe ONE
+    measurable outcome tied to ONE KPI (not a metric value). Quarterly
+    scope by default, monthly only if the TOR specifies it.
+    Do not bundle multiple activities/channels/KPIs into one objective by
+    chaining several "by/through" clauses. If a KPI genuinely needs a
+    supporting activity mentioned, name at most one — only if it's the
+    actual mechanism of the outcome, not a second, separately trackable
+    result.
 
-GRADE BAND GOAL FOCUS for {grade_band}:
-{grade_focus}
+2b. Impersonal voice, always. Start with an action verb. Never "I",
+    "I will", "I'll", or a job-title lead-in before the action.
 
-Do NOT draft objectives that belong to a higher grade band.
+2c. NO numbers, ever — no counts, percentages, currency, or codes. Do not include any numeric characters 
+    or numeric values in the generated output.
+
+2d. NO timeframe wording — no "within Q2", "this quarter", "by June",
+    "annually". time_frame is its own field, set later.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 3 — ORIGINALITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Draft every objective from THIS employee's actual BSC, JD, and LOS context
+only.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FINAL CHECKLIST — verify before returning output
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[ ] Every objective starts with an action verb (no "I", no job-title framing)
+[ ] Each objective describes ONE action toward ONE outcome — not chained
+    "by X, increasing Y, and expanding Z" clauses
+[ ] Zero digits or numeric symbols (%, $, etc.) anywhere in any objective field
+[ ] No quarter/month/year wording in any objective field
+[ ] No objective text numbers itself ("1.", "First,", etc.)
+[ ] Each objective's subject matches its bsc_strategic_objective
+[ ] Each bsc_kpi is copied exactly from the BSC context, used only once,
+    with no overlapping scope against any other draft
+[ ] No weight_percent, measure, target, category, tracking_source,
+    time_frame, or appraisal_logic fields present anywhere in the output
