@@ -11,11 +11,11 @@ type DemoUser = {
 };
 
 const DEMO_USERS: DemoUser[] = [
-  // { label: 'Manager (Card Banking)', short: 'Manager', email: 'manager.card@cbe.et', roleHint: 'Generate unit objectives' },
+  { label: 'Manager (Card Banking)', short: 'Manager', email: 'manager.card@cbe.et', roleHint: 'Generate unit objectives' },
   { label: 'Director (Card Banking)', short: 'Director', email: 'director.card@cbe.et', roleHint: 'Approve Card Banking' },
-  // { label: 'Manager (Recon)', short: 'Manager', email: 'manager.recon@cbe.et', roleHint: 'Reconciliation objectives' },
+  { label: 'Manager (Recon)', short: 'Manager', email: 'manager.recon@cbe.et', roleHint: 'Reconciliation objectives' },
   { label: 'Unit Director (Recon)', short: 'Director', email: 'director.recon@cbe.et', roleHint: 'Approve Recon unit' },
-  // { label: 'Manager (Merchant Management)', short: 'Manager', email: 'manager.merchant@cbe.et', roleHint: 'Merchant management objectives' },
+  { label: 'Manager (Merchant Management)', short: 'Manager', email: 'manager.merchant@cbe.et', roleHint: 'Merchant management objectives' },
   // { label: 'Manager (Agent Management)', short: 'Manager', email: 'manager.agent@cbe.et', roleHint: 'Agent management objectives' },
   // { label: 'Manager (Digital Partners)', short: 'Manager', email: 'manager.digitalpartners@cbe.et', roleHint: 'Digital partners objectives' },
   { label: 'Director (Merchant & Agent Mgmt)', short: 'Director', email: 'director.merchant@cbe.et', roleHint: 'Approve Merchant & Agent Mgmt' },
