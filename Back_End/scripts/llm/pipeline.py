@@ -90,15 +90,6 @@ STEP2_PRESERVED_FIELDS = (
     "los_alignment", "source", "draft_id",
 )
 
-_STEP3_FALLBACK_TEXT = (
-    "Appraisal logic unavailable — Step 3 generation failed after retries. "
-    "Regenerate this objective's appraisal before finalizing."
-)
-
-
-def _fallback_appraisal_logic() -> dict[str, str]:
-    return {field: _STEP3_FALLBACK_TEXT for field in APPRAISAL_FIELDS}
-
 
 def _call_llm(
     system: str,
@@ -206,14 +197,16 @@ def _verify_appraisal_complete(objectives: list[dict]) -> list[str]:
     return errors
 
 
-def _merge_step3_appraisal(step2_objectives: list[dict], step3_objectives: list[dict]) -> list[dict]:
-    """Preserve Step 2 fields exactly while adopting only the appraisal_logic Step 3 wrote."""
+def _merge_step3_appraisal(
+    step2_objectives: list[dict],
+    step3_objectives: list[dict],
+) -> list[dict]:
+    """Keep Step 2 as source of truth for all fields; only pull appraisal_logic from Step 3."""
     merged: list[dict] = []
     for s2, s3 in zip(step2_objectives, step3_objectives):
-        row = dict(s2)
-        if isinstance(s3, dict) and isinstance(s3.get("appraisal_logic"), dict):
-            row["appraisal_logic"] = dict(s3["appraisal_logic"])
-        merged.append(row)
+        obj = dict(s2)
+        obj["appraisal_logic"] = s3.get("appraisal_logic")
+        merged.append(obj)
     return merged
 
 
@@ -423,7 +416,6 @@ def generate_objectives(
             }
         )
 
-    step3_failed = False
     try:
         final_objectives = _run_step3(
             profile, objectives,
@@ -431,19 +423,12 @@ def generate_objectives(
             num_predict=max(3072, num_objectives * 500),
         )
     except Exception as exc:
-        step3_failed = True
-        _step_log(f"  Step 3 failed after retries: {exc}")
-        final_objectives = [
-            {**o, "appraisal_logic": _fallback_appraisal_logic()} for o in objectives
-        ]
+        _step_log(f"  Step 3 error detail: {exc!r}")
         if progress_callback:
             progress_callback(
                 {
                     "stage": "step3_failed",
-                    "message": (
-                        "Step 3 failed after retries. Returning Step 2 objectives with "
-                        "placeholder appraisal_logic — regenerate before finalizing."
-                    ),
+                    "message": f"Step 3 failed. Returning Step 2 objectives without appraisal. ({exc})",
                     "partial_result": {
                         "employee_profile": {
                             "division": profile.division,
@@ -453,12 +438,13 @@ def generate_objectives(
                             "job_grade": profile.job_grade,
                             "grade_band": profile.grade_band,
                         },
-                        "objectives": final_objectives,
-                        "total_weight": sum_weights(final_objectives),
+                        "objectives": objectives,
+                        "total_weight": sum_weights(objectives),
                         "pipeline_meta": {"stage": "step3_failed"},
                     },
                 }
             )
+        raise
 
     normalized, field_errors = normalize_objectives(final_objectives)
     if field_errors:
@@ -466,12 +452,6 @@ def generate_objectives(
 
     total_weight = sum_weights(normalized)
     warnings = validate_objectives(normalized, profile)
-    if step3_failed:
-        warnings.insert(
-            0,
-            "Step 3 (appraisal_logic) failed after retries — objectives contain placeholder "
-            "appraisal text; regenerate before finalizing.",
-        )
 
     return {
         "employee_profile": {
@@ -508,7 +488,6 @@ def generate_objectives(
                 "step2": len(user2),
                 "step3": len(build_step3_prompt(profile, objectives)[1]),
             },
-            "step3_failed": step3_failed,
             "warnings": warnings,
         },
     }

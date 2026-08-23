@@ -37,13 +37,11 @@ B. For each KPI, check the JD context AND the LOS context independently
    at least one LOS goal it matched, or mark los_alignment as N/A.
 
 C. If BSC KPIs run out before draft slots do, draft the remaining
-   objectives from the JD context's other core responsibilities, or from
-   LOS goals not yet covered if the JD context is exhausted. Every
-   objective — including these — must still anchor to a BSC KPI per step B.
+   objectives from the JD and LOS context's.
 
 D. NO DUPLICATES, NO OVERLAP: each bsc_kpi is used in exactly one draft,
    and no two drafts describe the same underlying responsibility in
-   different words. 
+   different words.
 
 E. SELF-CHECK before finalizing: does each draft's text actually match the
    subject of its bsc_strategic_objective?
@@ -51,23 +49,41 @@ E. SELF-CHECK before finalizing: does each draft's text actually match the
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULE 2 — FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-2a. SMART, single-focus. Start with an action verb; describe ONE
-    measurable outcome tied to ONE KPI (not a metric value). Quarterly
-    scope by default, monthly only if the TOR specifies it.
-    Do not bundle multiple activities/channels/KPIs into one objective by
-    chaining several "by/through" clauses. If a KPI genuinely needs a
-    supporting activity mentioned, name at most one — only if it's the
-    actual mechanism of the outcome, not a second, separately trackable
-    result.
+2a. ONE objective = ONE sentence = ONE main verb = ONE outcome = ONE KPI.
+    Start with an action verb. Maximum 16 words per objective (count every
+    word; if you cannot say it in 16 words or fewer, you are describing
+    more than one outcome — cut it down to the single most important one
+    for this KPI).
+
+    A second clause is NOT allowed under ANY of these forms, even without
+    the words "by" or "through":
+      - a comma followed by another -ing verb ("...offerings, increasing
+        active users, and ensuring satisfaction...")
+      - "and" introducing a second outcome
+      - "as well as", "in addition to", "while also", "coupled with"
+      - a second "by"/"through" clause naming a different mechanism
+    If you notice yourself writing a second clause, STOP after the first
+    outcome and delete everything from that connector onward. If the BSC
+    context supports the dropped outcome as its own KPI, write it as a
+    SEPARATE draft under Rule 1 instead — never fold it back into this one.
 
 2b. Impersonal voice, always. Start with an action verb. Never "I",
     "I will", "I'll", or a job-title lead-in before the action.
 
-2c. NO numbers, ever — no counts, percentages, currency, or codes. Do not include any numeric characters 
-    or numeric values in the generated output.
+2c. NO numbers, ever — no counts, percentages, currency, or codes. Do not
+    include any numeric characters or numeric values in the generated
+    output.
+    This also means no wording that implies a target, threshold, or
+    increment even without digits — no "reaches its target", "meets the
+    goal", "achieves the desired level", "increases significantly", "grows
+    substantially". Step 1 names WHAT improves, never by how much or to
+    what level. Magnitude, targets, and increments belong entirely to
+    Step 2 (measure, target, weight_percent) — do not anticipate them here.
 
 2d. NO timeframe wording — no "within Q2", "this quarter", "by June",
-    "annually". time_frame is its own field, set later.
+    "annually", "quarterly", "monthly". time_frame is its own field,
+    scoped and set later in Step 2 — do not assume or imply any scope
+    here.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULE 3 — ORIGINALITY
@@ -79,13 +95,15 @@ only.
 FINAL CHECKLIST — verify before returning output
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [ ] Every objective starts with an action verb (no "I", no job-title framing)
-[ ] Each objective describes ONE action toward ONE outcome — not chained
-    "by X, increasing Y, and expanding Z" clauses
+[ ] Every objective is 16 words or fewer
+[ ] Each objective describes exactly ONE outcome for ONE KPI — no second
+    clause introduced by a comma+gerund, "and", "as well as", "while also",
+    or a second "by/through" mechanism
 [ ] Zero digits or numeric symbols (%, $, etc.) anywhere in any objective field
-[ ] No quarter/month/year wording in any objective field
+[ ] No wording implies a target, threshold, or increment even without
+    digits ("reaches its target", "meets the goal", "increases significantly")
+[ ] No quarter/month/year/scope wording ("quarterly", "monthly", "annually",
+    "this quarter", "by June", etc.) in any objective field
 [ ] No objective text numbers itself ("1.", "First,", etc.)
-[ ] Each objective's subject matches its bsc_strategic_objective
-[ ] Each bsc_kpi is copied exactly from the BSC context, used only once,
-    with no overlapping scope against any other draft
 [ ] No weight_percent, measure, target, category, tracking_source,
     time_frame, or appraisal_logic fields present anywhere in the output

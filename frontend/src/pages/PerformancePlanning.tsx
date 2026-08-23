@@ -321,29 +321,8 @@ function downloadCSV(
   meta: ObjectiveSet | null,
   profile: EmployeeProfile | null,
 ) {
-  const header = [
-    '#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category',
-    'Tracking Source', 'Time Frame', 'BSC KPI', 'BSC Strategic Objective',
-    'LOS Alignment', 'Rating 5', 'Rating 4', 'Rating 3', 'Rating 2', 'Rating 1',
-  ];
-  const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const body = rows.map((r, i) => {
-    const a = r.appraisal_logic ?? EMPTY_APPRAISAL;
-    return [
-      i + 1,
-      esc(r.objective),
-      esc(r.measure),
-      esc(r.target),
-      r.weight_percent,
-      esc(r.category),
-      esc(r.tracking_source),
-      esc(r.time_frame),
-      esc(r.bsc_kpi ?? ''),
-      esc(r.bsc_strategic_objective ?? ''),
-      esc(r.los_alignment ?? ''),
-      esc(a.rating_5), esc(a.rating_4), esc(a.rating_3), esc(a.rating_2), esc(a.rating_1),
-    ];
-  });
+  const esc = (s: string) => `"${String(s ?? '').replace(/"/g, '""')}"`;
+
   const metaLines = [
     meta ? `Division,${meta.division}` : '',
     meta ? `Department,${meta.department}` : '',
@@ -352,9 +331,49 @@ function downloadCSV(
     profile?.grade_band ? `Grade Band,${formatGradeBand(profile.grade_band)}` : '',
     `Generated,${new Date().toLocaleString()}`,
     '',
-  ].filter(Boolean).join('\n');
-  const csv  = metaLines + [header.join(','), ...body.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  ].filter(Boolean);
+
+  const objectivesHeader = [
+    '#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category',
+    'BSC KPI', 'BSC Strategic Objective', 'LOS Alignment',
+  ];
+  const objectivesBody = rows.map((r, i) => [
+    i + 1,
+    esc(r.objective),
+    esc(r.measure),
+    esc(r.target),
+    r.weight_percent,
+    esc(r.category),
+    esc(r.bsc_kpi ?? ''),
+    esc(r.bsc_strategic_objective ?? ''),
+    esc(r.los_alignment ?? ''),
+  ].join(','));
+
+  const appraisalHeader = [
+    '#', 'Objective',
+    ...APPRAISAL_RATINGS.map(ar => `Rating ${ar.label} - ${ar.title}`),
+  ];
+  const appraisalBody = rows.map((r, i) => {
+    const a = r.appraisal_logic ?? EMPTY_APPRAISAL;
+    return [
+      i + 1,
+      esc(r.objective),
+      ...APPRAISAL_RATINGS.map(ar => esc(a[ar.key])),
+    ].join(',');
+  });
+
+  const lines = [
+    ...metaLines,
+    objectivesHeader.join(','),
+    ...objectivesBody,
+    '',
+    'Appraisal',
+    appraisalHeader.join(','),
+    ...appraisalBody,
+  ];
+
+  const csv  = lines.join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a'); a.href = url; a.download = 'objectives.csv'; a.click();
   URL.revokeObjectURL(url);
