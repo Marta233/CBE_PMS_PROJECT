@@ -30,16 +30,17 @@ from .llm_client import LLMUnavailableError, chat_json, check_llm_available
 from .json_utils import build_repair_prompt, parse_llm_json
 from .prompts import build_step1_prompt, build_step2_prompt, build_step3_prompt, build_all_prompts
 from .prompts.loader import step1_json_example, step2_json_example, step3_json_example
-from .validator import normalize_objectives, sum_weights, validate_objectives
+from .validator import normalize_objectives, sum_weights, validate_objectives, validate_step1_drafts
 
 
 DEFAULT_MODEL = OLLAMA_MODEL
 MAX_JSON_RETRIES = 2
 MAX_STEP_RETRIES = 2
+MAX_STEP1_CONTENT_RETRIES = 2  # separate budget for duplication/outcome-level re-asks
 APPRAISAL_FIELDS = ("rating_5", "rating_4", "rating_3", "rating_2", "rating_1")
 
 # Bump when prompt templates or fragments change — invalidates prior seeds for audits.
-PROMPT_VERSION = "1.1.0"
+PROMPT_VERSION = "1.3.0"
 STEP1_TEMPERATURE_DEFAULT = 0.3
 STRUCTURED_STEP_TEMPERATURE = 0.0
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -258,6 +259,89 @@ def _run_step3(
     raise ValueError("Step 3 returned no objectives")
 
 
+def _append_step1_feedback(user_prompt: str, issues: list[str]) -> str:
+    """Append named content-quality issues to the Step 1 user prompt for a targeted re-ask."""
+    return (
+        user_prompt
+        + "\n\n"
+        + "━" * 66
+        + "\nYOUR PREVIOUS ATTEMPT HAD THESE PROBLEMS — fix them and resubmit\n"
+        "ALL drafts (not just the ones flagged below):\n"
+        + "━" * 66
+        + "\n"
+        + "\n".join(f"- {issue}" for issue in issues)
+    )
+
+
+def _run_step1(
+    profile: EmployeeProfile,
+    context: dict,
+    num_drafts: int,
+    *,
+    model: str,
+    temperature: float,
+    seed: int | None,
+) -> tuple[list[dict], list[str]]:
+    """
+    Run Step 1, then validate draft CONTENT quality (duplication, outcome-level
+    phrasing, repeated BSC KPIs) and re-ask — with the specific problems named —
+    up to MAX_STEP1_CONTENT_RETRIES times.
+
+    The existing count-check retry (len(drafts) >= num_drafts) still runs first
+    inside this loop; content validation only runs once the count is correct,
+    since there's nothing useful to validate on a short/malformed response.
+
+    Returns (drafts, unresolved_content_warnings) — the warnings list is empty
+    if the final attempt was fully clean.
+    """
+    sys1, base_user1 = build_step1_prompt(profile, context, num_drafts)
+    user1 = base_user1
+    drafts: list[dict] = []
+    content_issues: list[str] = []
+
+    total_attempts = MAX_STEP_RETRIES + MAX_STEP1_CONTENT_RETRIES + 1
+    content_retries_used = 0
+
+    for attempt in range(total_attempts):
+        step1 = _call_llm(
+            sys1, user1,
+            model=model, temperature=temperature, seed=seed,
+            num_predict=max(2048, num_drafts * 350),
+            schema_example=step1_json_example(num_drafts),
+            label="step1_draft" if attempt == 0 else f"step1_draft_retry{attempt}",
+        )
+        drafts = step1.get("drafts", [])
+
+        if len(drafts) < num_drafts:
+            # Wrong count — plain retry, no feedback needed (existing behavior).
+            continue
+
+        content_issues = validate_step1_drafts(drafts)
+        if not content_issues:
+            return drafts, []
+
+        content_retries_used += 1
+        if content_retries_used > MAX_STEP1_CONTENT_RETRIES:
+            # Out of content-quality retries — ship best effort, surface warnings.
+            _step_log(
+                f"  Step 1 note: {len(content_issues)} content-quality issue(s) "
+                "remained after retries; shipping best attempt."
+            )
+            return drafts, content_issues
+
+        _step_log(
+            f"  Step 1 retry {content_retries_used}/{MAX_STEP1_CONTENT_RETRIES}: "
+            f"{len(content_issues)} content-quality issue(s) found, re-asking with feedback ..."
+        )
+        user1 = _append_step1_feedback(base_user1, content_issues)
+
+    if len(drafts) < num_drafts:
+        raise ValueError(
+            f"Step 1 returned {len(drafts)} drafts, expected at least {num_drafts}."
+        )
+    return drafts, content_issues
+
+
 def generate_objectives(
     context: dict,
     num_objectives: int,
@@ -273,7 +357,7 @@ def generate_objectives(
     check_llm_available(model)
 
     # Step 1 — draft objectives (cache hit skips LLM when profile/context unchanged)
-    sys1, user1 = build_step1_prompt(profile, context, num_drafts)
+    _, user1_for_meta = build_step1_prompt(profile, context, num_drafts)
     ctx_fp = context_fingerprint(
         context.get("jd_context", ""),
         context.get("bsc_context", ""),
@@ -288,28 +372,27 @@ def generate_objectives(
     )
     drafts: list = []
     step1_cache_hit = False
+    step1_content_warnings: list[str] = []
     cached_drafts = get_cached_step1_drafts(s1_key)
     if cached_drafts and len(cached_drafts) >= num_drafts:
         drafts = cached_drafts[:num_drafts]
         step1_cache_hit = True
         _step_log("  Step 1/3: cache hit — skipping draft LLM call")
+        # Cached drafts were validated under whatever rules were active when
+        # they were generated; re-check them against current rules so a
+        # stale cache entry doesn't silently bypass newer content checks.
+        step1_content_warnings = validate_step1_drafts(drafts)
+        if step1_content_warnings:
+            _step_log(
+                f"  Step 1 cache note: {len(step1_content_warnings)} content-quality "
+                "issue(s) found in cached drafts (not re-run against LLM)."
+            )
     else:
         _step_log("  Step 1/3: calling LLM (draft objectives) — this may take a few minutes ...")
-        for attempt in range(MAX_STEP_RETRIES + 1):
-            step1 = _call_llm(
-                sys1, user1,
-                model=model, temperature=temperature, seed=seed,
-                num_predict=max(2048, num_drafts * 350),
-                schema_example=step1_json_example(num_drafts),
-                label="step1_draft",
-            )
-            drafts = step1.get("drafts", [])
-            if len(drafts) >= num_drafts:
-                break
-        if len(drafts) < num_drafts:
-            raise ValueError(
-                f"Step 1 returned {len(drafts)} drafts, expected at least {num_drafts}."
-            )
+        drafts, step1_content_warnings = _run_step1(
+            profile, context, num_drafts,
+            model=model, temperature=temperature, seed=seed,
+        )
         set_cached_step1_drafts(s1_key, drafts)
     if progress_callback:
         preview_objectives: list[dict[str, Any]] = []
@@ -452,6 +535,8 @@ def generate_objectives(
 
     total_weight = sum_weights(normalized)
     warnings = validate_objectives(normalized, profile)
+    if step1_content_warnings:
+        warnings = [f"[Step 1] {w}" for w in step1_content_warnings] + warnings
 
     return {
         "employee_profile": {
@@ -484,7 +569,7 @@ def generate_objectives(
                 "step3": STRUCTURED_STEP_TEMPERATURE,
             },
             "prompt_chars": {
-                "step1": len(user1),
+                "step1": len(user1_for_meta),
                 "step2": len(user2),
                 "step3": len(build_step3_prompt(profile, objectives)[1]),
             },
