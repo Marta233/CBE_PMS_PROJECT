@@ -4,14 +4,14 @@ import { useState, useRef, useCallback } from 'react';
 import {
   Upload, FileText, CheckCircle, AlertCircle, X,
   CloudUpload, RefreshCw, Info, Trash2, ChevronDown, ChevronUp,
-  Database, Layers, BookOpen, BarChart2,
+  Database, Layers, BookOpen, BarChart2, Target,
 } from 'lucide-react';
 import Layout from '../components/Layout';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type DocType = 'BSC' | 'JD' | 'LOS';
+type DocType = 'BSC' | 'JD' | 'LOS' | 'WP';
 type FileStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 interface SelectedFile {
@@ -71,6 +71,16 @@ const DOC_CONFIGS: Record<DocType, {
     borderColor: 'border-emerald-200 dark:border-emerald-800',
     accepts:     '.xlsx,.xls,.csv,.pdf',
     hint:        'Excel or CSV with perspective, objective columns',
+  },
+  WP: {
+    label:       'Work Plan (WP)',
+    description: 'Unit-level quarterly/monthly targets — Priority 1 context',
+    icon:        Target,
+    color:       'text-amber-700',
+    bgColor:     'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800',
+    accepts:     '.docx,.doc',
+    hint:        'Word — one file per department, tagged by unit (Agent/Merchant/etc.)',
   },
 };
 
@@ -253,6 +263,7 @@ function ResultLog({ results }: { results: IngestResult[] }) {
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                       r.doc_type === 'BSC' ? 'bg-blue-100 text-blue-700' :
                       r.doc_type === 'JD'  ? 'bg-purple-100 text-purple-700' :
+                      r.doc_type === 'WP'  ? 'bg-amber-100 text-amber-700' :
                       'bg-emerald-100 text-emerald-700'
                     }`}>
                       {r.doc_type}
@@ -430,9 +441,9 @@ export default function DataIngestion() {
         </div>
       )}
 
-      {/* ── Three drop zones ────────────────────────────────────────────── */}
+      {/* ── Four drop zones ─────────────────────────────────────────────── */}
       <div className="space-y-4 mb-6">
-        {(['BSC', 'JD', 'LOS'] as DocType[]).map(dt => (
+        {(['BSC', 'JD', 'LOS', 'WP'] as DocType[]).map(dt => (
           <DropZone
             key={dt}
             docType={dt}

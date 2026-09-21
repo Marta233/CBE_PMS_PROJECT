@@ -59,12 +59,13 @@ def _get_extractor():
             ),
         )
 
-    bsc_docs, jd_docs, los_docs = load_knowledge_base(KNOWLEDGE_BASE_FILE)
+    bsc_docs, jd_docs, los_docs, work_plan_docs = load_knowledge_base(KNOWLEDGE_BASE_FILE)
     logger.info(
-        "Knowledge base loaded — BSC:%s JD:%s LOS:%s",
+        "Knowledge base loaded — BSC:%s JD:%s LOS:%s WorkPlan:%s",
         len(bsc_docs),
         len(jd_docs),
         len(los_docs),
+        len(work_plan_docs),
     )
 
     bsc_vs = PMSVectorStore(embedding_model=EMBEDDING_MODEL, index_path=FAISS_INDEX_PATH)
@@ -86,6 +87,7 @@ def _get_extractor():
         los_docs=los_docs,
         jd_docs=jd_docs,
         bsc_vectorstore=bsc_vs,
+        work_plan_docs=work_plan_docs,
     )
     return _extractor
 
@@ -153,7 +155,7 @@ def _build_retrieval_incomplete_detail(job_title: str, result) -> dict:
     }
 
 
-def _display_retrieved(result, jd_context, bsc_context, los_context):
+def _display_retrieved(result, jd_context, bsc_context, los_context, work_plan_context):
     from embedding.extractor import _get_text  # type: ignore
 
     _section("STEP 2 OF 4  —  RETRIEVED CONTEXT")
@@ -170,9 +172,20 @@ def _display_retrieved(result, jd_context, bsc_context, los_context):
         "LOS documents",
         f"{len(result.los_docs)} retrieved" if result.los_docs else "0 found",
     )
+    _kv(
+        "Work Plan documents",
+        f"{len(result.work_plan_docs)} retrieved (Priority 1)" if result.work_plan_docs else "0 found",
+    )
     _kv("JD length", f"{len(jd_context):,} chars")
     _kv("BSC length", f"{len(bsc_context):,} chars")
     _kv("LOS length", f"{len(los_context):,} chars")
+    _kv("Work Plan length", f"{len(work_plan_context):,} chars")
+    _subsection("WORK PLAN DOCUMENTS (Priority 1)")
+    if result.work_plan_docs:
+        for i, doc in enumerate(result.work_plan_docs, 1):
+            _doc_preview(doc, i, 300)
+    else:
+        print("    No Work Plan documents found for this unit/department.")
     _subsection("JD DOCUMENT")
     if result.jd_doc:
         from embedding.extractor import _get_meta  # type: ignore
@@ -437,21 +450,23 @@ def _build_query(req: GenerateRequest) -> str:
     )
 
 
-def _contexts_from_payload(payload: dict) -> tuple[str, str, str]:
+def _contexts_from_payload(payload: dict) -> tuple[str, str, str, str]:
     return (
         payload.get("jd_context", ""),
         payload.get("bsc_context", ""),
         payload.get("los_context", ""),
+        payload.get("work_plan_context", ""),
     )
 
 
 def _build_context(req: GenerateRequest, query: str, payload: dict) -> dict:
-    jd_context, bsc_context, los_context = _contexts_from_payload(payload)
+    jd_context, bsc_context, los_context, work_plan_context = _contexts_from_payload(payload)
     context = {
         "query": query,
         "jd_context": jd_context,
         "bsc_context": bsc_context,
         "los_context": los_context,
+        "work_plan_context": work_plan_context,
     }
     if req.employee_id:
         context["employee_id"] = sanitize_user_field(req.employee_id)
@@ -473,15 +488,18 @@ def _run_retrieval(query: str):
     jd_context = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
+    work_plan_context = "\n\n".join(_get_text(d) for d in result.work_plan_docs)
 
     payload = {
         "query": query,
         "jd_context": jd_context,
         "bsc_context": bsc_context,
         "los_context": los_context,
+        "work_plan_context": work_plan_context,
         "jd_found": result.jd_doc is not None,
         "bsc_count": len(result.bsc_docs),
         "los_count": len(result.los_docs),
+        "work_plan_count": len(result.work_plan_docs),
     }
     return result, payload
 
@@ -552,8 +570,8 @@ def generate(req: GenerateRequest, response: Response):
     query = _build_query(req)
     result, payload = _run_retrieval(query)
 
-    jd_context, bsc_context, los_context = _contexts_from_payload(payload)
-    _display_retrieved(result, jd_context, bsc_context, los_context)
+    jd_context, bsc_context, los_context, work_plan_context = _contexts_from_payload(payload)
+    _display_retrieved(result, jd_context, bsc_context, los_context, work_plan_context)
 
     if not payload.get("jd_found"):
         print(f'\n  No job description found for "{job_title}" — continuing without JD context')

@@ -288,7 +288,15 @@ class LOSLoader:
 
     def to_documents(self) -> List[Dict[str, Any]]:
         """
-        Convert LOS into embedding-ready documents
+        Convert LOS into embedding-ready documents.
+
+        Text excludes Division/Department — those are already stated in
+        the employee's own query profile (Division/Department/Unit/Job
+        Title/Job Grade), so repeating them on every single LOS row is
+        pure redundant token cost with zero new information. Division and
+        Department stay in `metadata` below, which is what _filter_los_
+        hierarchical() actually uses for department/unit matching —
+        metadata is for retrieval only, never shown to the model directly.
         """
 
         if self.combined_data is None:
@@ -300,8 +308,6 @@ class LOSLoader:
         for _, row in self.combined_data.iterrows():
 
             text = f"""
-            Division: {row['division']}
-            Department: {row['department']}
             Perspective: {row['perspective']}
             Strategic Objective: {row['strategic_objective']}
             Division Objective: {row['division_objective']}

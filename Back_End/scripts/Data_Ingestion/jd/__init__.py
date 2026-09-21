@@ -7,16 +7,20 @@ import pandas as pd
 
 
 def _df_to_documents(df: pd.DataFrame, division: str) -> List[Dict[str, Any]]:
+    """
+    Text is ONLY the main content the model needs — Job Objective +
+    Responsibilities. Division/Unit/Department/Job Title/Job Grade are
+    already stated once in the employee's own query, so repeating them
+    on every JD document is pure redundant token cost. Those fields stay
+    in `metadata` only — QueryExtractor._match_jd_flexible() matches
+    against metadata, not text, so nothing depends on them being repeated
+    in the text anymore.
+    """
     docs = []
     for _, row in df.iterrows():
         resps = row.get("responsibilities", [])
         resp_text = "\n".join(f"- {r}" for r in resps) if isinstance(resps, list) else str(resps)
         text = (
-            f"Division: {row.get('division', division)}\n"
-            f"Unit: {row.get('unit','')}\n"
-            f"Department: {row.get('department','')}\n"
-            f"Job Title: {row.get('job_title','')}\n"
-            f"Job Grade: {row.get('job_grade','N/A')}\n"
             f"Job Objective: {row.get('job_objective','N/A')}\n"
             f"Responsibilities:\n{resp_text}"
         )

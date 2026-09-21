@@ -36,8 +36,8 @@ from langchain_core.documents import Document  # noqa: E402
 DEFAULT_QUERY = """
 Division: Digital Banking
 Job Title: Banking Operation Officer
-Department: Mobile & Internet Banking
-Unit: Mobile Banking Business
+Department:Merchant and Agent Management
+Unit:Merchant Management
 Job Grade: 9
 """
 
@@ -51,7 +51,7 @@ def run(query: str = DEFAULT_QUERY, *, bsc_k: int = 10) -> dict:
     print(f"   FAISS index    : {FAISS_INDEX_PATH}")
 
     print("\nLoading knowledge base...")
-    bsc_docs, jd_docs, los_docs = load_knowledge_base(KNOWLEDGE_BASE_FILE)
+    bsc_docs, jd_docs, los_docs, work_plan_docs = load_knowledge_base(KNOWLEDGE_BASE_FILE)
 
     bsc_vectorstore = PMSVectorStore(
         embedding_model=EMBEDDING_MODEL,
@@ -75,11 +75,17 @@ def run(query: str = DEFAULT_QUERY, *, bsc_k: int = 10) -> dict:
         los_docs=los_docs,
         jd_docs=jd_docs,
         bsc_vectorstore=bsc_vectorstore,
+        work_plan_docs=work_plan_docs,
     )
 
     print(f"\nQuery:\n{query}")
     result = extractor.extract(query, bsc_k=bsc_k)
     print(result.summary)
+
+    print(f"\nWork Plan Documents ({len(result.work_plan_docs)}) — PRIORITY 1:")
+    for i, doc in enumerate(result.work_plan_docs, 1):
+        print(f"\n  [{i}] Meta : {_get_meta(doc)}")
+        print(f"       Text : {_get_text(doc)[:120]}")
 
     if result.jd_doc:
         print("\nJD Document:")
@@ -98,17 +104,20 @@ def run(query: str = DEFAULT_QUERY, *, bsc_k: int = 10) -> dict:
         print(f"\n  [{i}] Meta : {_get_meta(doc)}")
         print(f"       Text : {_get_text(doc)[:120]}")
 
+    work_plan_context = "\n\n".join(_get_text(d) for d in result.work_plan_docs)
     jd_context = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
 
     print("\nContexts ready:")
+    print(f"   Work Plan (Priority 1): {len(work_plan_context)} chars  ({len(result.work_plan_docs)} docs)")
     print(f"   JD  : {len(jd_context)} chars")
     print(f"   BSC : {len(bsc_context)} chars  ({len(result.bsc_docs)} docs)")
     print(f"   LOS : {len(los_context)} chars  ({len(result.los_docs)} docs)")
 
     context = {
         "query": query.strip(),
+        "work_plan_context": work_plan_context,
         "jd_context": jd_context,
         "bsc_context": bsc_context,
         "los_context": los_context,

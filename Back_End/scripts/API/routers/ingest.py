@@ -9,6 +9,7 @@ import gc
 import json
 import logging
 import math
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -28,7 +29,7 @@ from ..config import (
 logger = logging.getLogger("pms.ingest")
 router = APIRouter()
 
-DocType = Literal["BSC", "JD", "LOS"]
+DocType = Literal["BSC", "JD", "LOS", "WP"]
 
 # ── Extension → MIME mapping ──────────────────────────────────────────────────
 _EXT_TO_MIME = {
@@ -85,6 +86,9 @@ def _run_pipeline(doc_type: str, file_path: Path) -> list:
         return run(file_path)
     if doc_type == "LOS":
         from los import run   # type: ignore
+        return run(file_path)
+    if doc_type == "WP":
+        from WP import run    # type: ignore  (Data_Ingestion/WP/__init__.py — same pattern as los/__init__.py)
         return run(file_path)
     raise ValueError(f"Unknown doc_type: {doc_type}")
 
@@ -178,26 +182,36 @@ async def ingest_file(
         raise HTTPException(422, detail="Pipeline produced 0 documents. Check file format.")
 
     # ── 4. Load existing knowledge base ───────────────────────────────────────
+    # If the file exists but can't be read, STOP. Falling back to an empty list
+    # would make step 6 overwrite the whole knowledge base with only this upload.
     existing: list = []
-    if KNOWLEDGE_BASE_FILE.exists():
+    if KNOWLEDGE_BASE_FILE.exists() and KNOWLEDGE_BASE_FILE.stat().st_size > 0:
         try:
             existing = json.loads(KNOWLEDGE_BASE_FILE.read_text(encoding="utf-8"))
+            if not isinstance(existing, list):
+                raise ValueError("top-level JSON is not a list")
         except Exception as exc:
-            logger.warning(f"Could not read existing knowledge base: {exc}")
+            logger.error(f"Knowledge base unreadable: {exc}", exc_info=True)
+            raise HTTPException(
+                500,
+                detail=f"knowledge_base.json exists but could not be read ({exc}). "
+                       f"Refusing to overwrite it. Fix or restore the file, then retry.",
+            )
 
-    # ── 5. Deduplicate: remove old chunks for the same (source, division) keys ─
-    new_keys = {
-        (doc.get("metadata", {}).get("source"), doc.get("metadata", {}).get("division"))
-        for doc in new_docs
-        if isinstance(doc, dict)
-    }
-    filtered = [
-        doc for doc in existing
-        if (
-            doc.get("metadata", {}).get("source"),
-            doc.get("metadata", {}).get("division"),
-        ) not in new_keys
-    ]
+    # ── 5. Deduplicate: remove old chunks for the same identity key ───────────
+    # BSC/JD/LOS identify by (source, division).
+    # Work Plan identifies by (department, fiscal_year, unit): re-uploading a
+    # plan REPLACES only the units it contains for that department + FY, and
+    # new departments / units / fiscal years are simply ADDED.
+    def _dedup_key(doc: dict) -> tuple:
+        meta = doc.get("metadata", {})
+        source = meta.get("source")
+        if source == "WorkPlan":
+            return (source, meta.get("department"), meta.get("fiscal_year"), meta.get("unit"))
+        return (source, meta.get("division"))
+
+    new_keys = {_dedup_key(doc) for doc in new_docs if isinstance(doc, dict)}
+    filtered = [doc for doc in existing if _dedup_key(doc) not in new_keys]
     removed = len(existing) - len(filtered)
     if removed:
         logger.info(f"♻️  Removed {removed} old chunks for keys: {new_keys}")
@@ -205,7 +219,11 @@ async def ingest_file(
     # ── 6. Merge and save knowledge base ──────────────────────────────────────
     merged = filtered + new_docs
     try:
-        KNOWLEDGE_BASE_FILE.write_text(_safe_dumps(merged), encoding="utf-8")
+        tmp_path = KNOWLEDGE_BASE_FILE.with_suffix(".json.tmp")
+        tmp_path.write_text(_safe_dumps(merged), encoding="utf-8")          # write fully first
+        if KNOWLEDGE_BASE_FILE.exists():
+            shutil.copy2(KNOWLEDGE_BASE_FILE, KNOWLEDGE_BASE_FILE.with_suffix(".json.bak"))
+        tmp_path.replace(KNOWLEDGE_BASE_FILE)                                # then swap in
     except Exception as exc:
         logger.error(f"JSON serialisation failed: {exc}", exc_info=True)
         raise HTTPException(500, detail=f"Could not serialise documents: {exc}")

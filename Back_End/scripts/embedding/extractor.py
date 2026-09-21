@@ -73,6 +73,34 @@ LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
     ],
 }
 
+# Same purpose and structure as LOS_DEPARTMENT_MAP above, but keyed to the
+# LITERAL department strings actually stored in Work Plan metadata (set
+# via Data_Ingestion/WP/config.py's DEPARTMENT_ALIASES), not LOS's own
+# canonical taxonomy. This is the fix for a real bug: _filter_work_plan
+# was being called with result.detected_department (LOS's canonical key,
+# e.g. "Online Banking" for Mobile & Internet Banking) while Work Plan
+# documents are tagged with the literal name ("Mobile & Internet
+# Banking") — those two strings never matched, so Work Plan always
+# returned 0 documents regardless of unit filtering.
+WORK_PLAN_DEPARTMENT_MAP: dict[str, list[str]] = {
+    "Mobile & Internet Banking": [
+        "online banking", "mobile &internet banking",
+        "mobile & internet banking", "mobile and internet banking",
+        "internet banking", "mobile banking", "mobile &internet",
+        "mobile banking business", "internet banking business",
+    ],
+    "Merchant and Agent Management": [
+        "merchant and agent management", "merchant and agent banking",
+        "merchant agent management", "merchant management",
+        "agent management", "pos merchant",
+    ],
+    "Card Banking": ["card banking", "director card banking", "card production", "card and pin"],
+    "Digital Service Development": ["digital service development", "digital service dev", "dsd"],
+    "Digital Banking Reconciliation and Dispute Management": [
+        "digital banking reconciliation", "reconciliation and dispute management",
+    ],
+}
+
 JD_DEPARTMENT_MAP: dict[str, list[str]] = {
     "Internal Control": ["Internal Control", "Internal Audit", "Control"],
     "Digital Banking Reconciliation and Dispute Management": [
@@ -277,6 +305,11 @@ def _extract_jd_field(text: str, field_name: str) -> str:
     m = re.search(rf"(?:^|\n){re.escape(field_name)}\s*:\s*([^\n]+)", text, re.IGNORECASE)
     return re.sub(r"[,;:]$", "", m.group(1).strip()) if m else ""
 
+# NOTE: division/department/unit/job_title are no longer parsed from JD
+# text (that field only holds Job Objective + Responsibilities now) —
+# _match_jd_flexible reads them from `metadata` instead. These four
+# wrappers are kept only in case something else still calls them; they
+# will return "" against current JD documents.
 def _extract_jd_division(text: str)   -> str: return _extract_jd_field(text, "Division")
 def _extract_jd_department(text: str) -> str: return _extract_jd_field(text, "Department")
 def _extract_jd_unit(text: str)       -> str: return _extract_jd_field(text, "Unit")
@@ -300,12 +333,12 @@ def _extract_jd_objectives_from_text(text: str) -> str:
 # =========================================================
 # KNOWLEDGE BASE LOADER  ← KEY IMPROVEMENT
 # =========================================================
-def load_knowledge_base(kb_path: Path) -> tuple[list, list, list]:
+def load_knowledge_base(kb_path: Path) -> tuple[list, list, list, list]:
     """
-    Load BSC, JD, LOS documents directly from knowledge_base.json.
+    Load BSC, JD, LOS, and Work Plan documents directly from knowledge_base.json.
     No re-running of any ingestion pipeline needed.
 
-    Returns (bsc_docs, jd_docs, los_docs) as LangChain Document objects.
+    Returns (bsc_docs, jd_docs, los_docs, work_plan_docs) as LangChain Document objects.
     """
     if not kb_path.exists():
         raise FileNotFoundError(f"Knowledge base not found: {kb_path}")
@@ -313,21 +346,25 @@ def load_knowledge_base(kb_path: Path) -> tuple[list, list, list]:
     raw: list = json.loads(kb_path.read_text(encoding="utf-8"))
     logger.info(f"📂 Loaded {len(raw)} docs from {kb_path.name}")
 
-    bsc_docs, jd_docs, los_docs = [], [], []
+    bsc_docs, jd_docs, los_docs, work_plan_docs = [], [], [], []
     for item in raw:
         source = item.get("metadata", {}).get("source", "")
         doc = Document(
             page_content=item.get("text", ""),
             metadata=item.get("metadata", {}),
         )
-        if source == "BSC":   bsc_docs.append(doc)
-        elif source == "JD":  jd_docs.append(doc)
-        elif source == "LOS": los_docs.append(doc)
+        if source == "BSC":        bsc_docs.append(doc)
+        elif source == "JD":       jd_docs.append(doc)
+        elif source == "LOS":      los_docs.append(doc)
+        elif source == "WorkPlan": work_plan_docs.append(doc)
         else:
             logger.warning(f"  Unknown source '{source}' — skipping")
 
-    logger.info(f"  ✓ BSC:{len(bsc_docs)}  JD:{len(jd_docs)}  LOS:{len(los_docs)}")
-    return bsc_docs, jd_docs, los_docs
+    logger.info(
+        f"  ✓ BSC:{len(bsc_docs)}  JD:{len(jd_docs)}  LOS:{len(los_docs)}  "
+        f"WorkPlan:{len(work_plan_docs)}"
+    )
+    return bsc_docs, jd_docs, los_docs, work_plan_docs
 
 
 # =========================================================
@@ -337,11 +374,13 @@ def load_knowledge_base(kb_path: Path) -> tuple[list, list, list]:
 class ExtractionResult:
     los_docs:   List = field(default_factory=list)
     bsc_docs:   List = field(default_factory=list)
+    work_plan_docs: List = field(default_factory=list)
     jd_doc:     object = None
     bsc_scores: List[float] = field(default_factory=list)
     detected_division:        Optional[str] = None
     detected_department:      Optional[str] = None
     detected_department_name: Optional[str] = None
+    detected_work_plan_department: Optional[str] = None
     detected_job_title:       Optional[str] = None
     detected_unit:            Optional[str] = None
     detected_job_grade:       Optional[str] = None
@@ -353,19 +392,25 @@ class ExtractionResult:
         lines += [
             f"  Division   : {self.detected_division or '(none)'}",
             f"  Department : {self.detected_department_name or '(none)'}",
+            f"  WP Dept    : {self.detected_work_plan_department or '(none)'}",
             f"  Unit       : {self.detected_unit or '(none)'}",
             f"  Job title  : {self.detected_job_title or '(none)'}",
             f"  Job grade  : {self.detected_job_grade or '(none)'}",
             f"  LOS docs   : {len(self.los_docs)}",
             f"  BSC docs   : {len(self.bsc_docs)}",
+            f"  Work Plan docs : {len(self.work_plan_docs)}  (Priority 1)",
             f"  JD doc     : {'✓ found' if self.jd_doc else '✗ not found'}",
         ]
         return "\n".join(lines)
 
     def as_context(self) -> str:
         parts: list[str] = []
+        if self.work_plan_docs:
+            parts.append("=== WORK PLAN (PRIORITY 1) ===")
+            for i, d in enumerate(self.work_plan_docs, 1):
+                parts += [f"--- Work Plan {i} ---", _get_text(d)]
         if self.jd_doc:
-            parts += ["=== JOB DESCRIPTION ===", _get_text(self.jd_doc)]
+            parts += ["\n=== JOB DESCRIPTION ===", _get_text(self.jd_doc)]
         if self.bsc_docs:
             parts.append("\n=== BSC KPIs ===")
             for i, d in enumerate(self.bsc_docs, 1):
@@ -382,9 +427,10 @@ class ExtractionResult:
 # =========================================================
 class QueryExtractor:
 
-    def __init__(self, los_docs, jd_docs, bsc_vectorstore):
+    def __init__(self, los_docs, jd_docs, bsc_vectorstore, work_plan_docs=None):
         self.los_docs        = list(los_docs)
         self.jd_docs         = list(jd_docs)
+        self.work_plan_docs  = list(work_plan_docs or [])
         self.bsc_vectorstore = bsc_vectorstore
         self._all_bsc_docs: Optional[List] = None
         self._bge_query_prefix = getattr(bsc_vectorstore, "_bge_query_prefix", "")
@@ -414,6 +460,9 @@ class QueryExtractor:
         result.detected_department      = self._detect_los_department(
             query, raw_department=result.detected_department_name
         )
+        result.detected_work_plan_department = self._detect_work_plan_department(
+            query, raw_department=result.detected_department_name
+        )
 
         logger.info(
             f"\n  Query fields:\n"
@@ -430,6 +479,16 @@ class QueryExtractor:
                 result.detected_department, result.detected_unit
             )
             logger.info(f"  LOS docs: {len(result.los_docs)}")
+
+        # Work Plan — PRIORITY 1. Uses its OWN department detection
+        # (WORK_PLAN_DEPARTMENT_MAP), NOT result.detected_department (LOS's
+        # canonical key) — WP documents are tagged with the literal
+        # department name, which LOS's canonical key does not match.
+        if result.detected_work_plan_department:
+            result.work_plan_docs = self._filter_work_plan(
+                result.detected_work_plan_department, result.detected_unit
+            )
+            logger.info(f"  Work Plan docs: {len(result.work_plan_docs)}")
 
         # JD — fallback chain
         result.jd_doc = self._match_jd_with_fallback(
@@ -483,6 +542,25 @@ class QueryExtractor:
                     return dept
         return None
 
+    def _detect_work_plan_department(self, query: str, raw_department: Optional[str] = None) -> Optional[str]:
+        """Same lookup as _detect_los_department, but returns the LITERAL
+        department string stored in Work Plan metadata (WORK_PLAN_DEPARTMENT_MAP),
+        not LOS's canonical key — this is what fixes Work Plan retrieval."""
+        q_norm = _normalize(query)
+        pairs  = sorted(
+            [(_normalize(kw), dept) for dept, kws in WORK_PLAN_DEPARTMENT_MAP.items() for kw in kws],
+            key=lambda x: len(x[0]), reverse=True,
+        )
+        for norm_kw, dept in pairs:
+            if norm_kw in q_norm:
+                return dept
+        if raw_department:
+            dept_norm = _normalize(raw_department)
+            for norm_kw, dept in pairs:
+                if norm_kw in dept_norm or dept_norm in norm_kw:
+                    return dept
+        return None
+
     def _expand_unit_synonyms(self, unit: str) -> str:
         if not unit:
             return ""
@@ -508,6 +586,59 @@ class QueryExtractor:
             scored.append((doc, score))
         scored.sort(key=lambda x: -x[1])
         return [d for d, _ in scored]
+
+    # ── Work Plan filtering — PRIORITY 1, same pattern as LOS ────────────────
+    _WORK_PLAN_UNIT_KEYWORDS: dict[str, str] = {
+        "agent": "Agent",
+        "merchant": "Merchant",
+        "mesob": "Mesob",
+        "mobile": "Mobile Banking",
+        "internet": "Internet Banking",
+    }
+
+    def _extract_work_plan_unit(self, unit_text: str) -> Optional[str]:
+        """Map free-text unit (e.g. 'Agent Management Unit') to the Work
+        Plan's normalized unit tag (Agent/Merchant/Mesob)."""
+        u = _normalize(unit_text)
+        for key, value in self._WORK_PLAN_UNIT_KEYWORDS.items():
+            if key in u:
+                return value
+        return None
+
+    def _filter_work_plan(self, department: Optional[str], unit: Optional[str]) -> list:
+        """
+        Department filtering here is identical to _filter_los_hierarchical:
+        exact or substring match on normalized department.
+
+        Unit filtering is DELIBERATELY a HARD filter, unlike LOS's soft rank
+        boost. LOS only nudges a unit-matching doc higher while still
+        returning everything in the department, because its unit signal is
+        a fuzzy substring search over raw text. Work Plan's entire purpose
+        is preventing cross-unit mixing (e.g. Agent objectives blending
+        with Merchant/POS data) — a soft rank would still leave a
+        wrong-unit entry in the context for the model to see, just lower
+        down, which doesn't solve the problem. Work Plan's unit field is
+        also clean, already-normalized metadata (Agent/Merchant/Both/
+        Mesob), not text requiring a fuzzy match, so a hard filter here
+        doesn't risk losing genuinely relevant docs the way it might for
+        LOS's fuzzier signal. "Both"-tagged entries always pass through,
+        since they apply to every unit in the department.
+        """
+        if not department:
+            return []
+        dept_norm = _normalize(department)
+        unit_tag = self._extract_work_plan_unit(unit) if unit else None
+
+        matched = []
+        for doc in self.work_plan_docs:
+            meta_dept = _normalize(_get_meta(doc).get("department", ""))
+            if meta_dept != dept_norm and dept_norm not in meta_dept:
+                continue
+            doc_unit = _get_meta(doc).get("unit", "")
+            if unit_tag and doc_unit not in (unit_tag, "Both"):
+                continue
+            matched.append(doc)
+        return matched
 
     # ── JD fallback chain  (IMPROVEMENT #5) ──────────────────────────────────
     def _match_jd_with_fallback(
@@ -544,6 +675,14 @@ class QueryExtractor:
         job_title:  Optional[str],
         job_grade:  Optional[str] = None,
     ):
+        """
+        Matches against `metadata`, NOT the text field. JD text no longer
+        contains Division/Unit/Department/Job Title/Job Grade (trimmed out
+        as redundant with the query — see jd/__init__.py and jd_main.py),
+        so regex-extracting those fields from text would always come back
+        empty. Metadata already carries all five fields structured, and is
+        more robust than regex-parsing free text ever was.
+        """
         if not self.jd_docs:
             return None
         q_div   = _normalize(division)   if division   else None
@@ -552,11 +691,11 @@ class QueryExtractor:
         q_title = _normalize(job_title)  if job_title  else None
 
         for doc in self.jd_docs:
-            text = _get_text(doc)
-            if q_div   and _normalize(_extract_jd_division(text))   != q_div:   continue
-            if q_unit  and _normalize(_extract_jd_unit(text))       != q_unit:  continue
-            if q_title and _normalize(_extract_jd_job_title(text))  != q_title: continue
-            if q_dept  and not self._department_match(q_dept, _normalize(_extract_jd_department(text))): continue
+            meta = _get_meta(doc)
+            if q_div   and _normalize(meta.get("division", ""))  != q_div:   continue
+            if q_unit  and _normalize(meta.get("unit", ""))      != q_unit:  continue
+            if q_title and _normalize(meta.get("job_title", "")) != q_title: continue
+            if q_dept  and not self._department_match(q_dept, _normalize(meta.get("department", ""))): continue
             return doc
         return None
 

@@ -21,12 +21,20 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 DOCS_DIR = DATA_DIR / "documents"
 VECTORSTORE_DIR = DATA_DIR / "vectorstore"
 
+# Keyed by metadata["source"] — the tag stored INSIDE each parsed document
+# (see work_plan_loader.py's to_documents(): metadata["source"] = "WorkPlan").
+# Used by status.py to count documents already in knowledge_base.json.
 DOC_FILES = {
     "BSC": DOCS_DIR / "bsc_documents.json",
     "JD": DOCS_DIR / "jd_documents.json",
     "LOS": DOCS_DIR / "los_documents.json",
+    "WorkPlan": DOCS_DIR / "work_plan_documents.json",
 }
 
+# Keyed by doc_type — the value the UPLOAD FORM sends (DocType Literal in
+# ingest.py: "BSC" | "JD" | "LOS" | "WP"). This is a DIFFERENT key space
+# from DOC_FILES above — "WP" here, not "WorkPlan" — because this dict is
+# looked up as ACCEPTED_TYPES[doc_type], and doc_type is always "WP".
 ACCEPTED_TYPES = {
     "BSC": {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -45,6 +53,10 @@ ACCEPTED_TYPES = {
         "application/vnd.ms-excel",
         "text/csv",
         "application/pdf",
+    },
+    "WP": {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
     },
 }
 

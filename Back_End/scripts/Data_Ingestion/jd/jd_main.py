@@ -73,12 +73,12 @@ def run_pipeline() -> tuple[pd.DataFrame, list]:
         else:
             resp_text = str(responsibilities) if pd.notna(responsibilities) else ""
 
+        # Text is ONLY Job Objective + Responsibilities — Division/Unit/
+        # Department/Job Title/Job Grade are already in the employee's own
+        # query, so repeating them per document is redundant token cost.
+        # Those fields stay in `metadata` below, which is what
+        # QueryExtractor._match_jd_flexible() actually matches against.
         text = (
-            f"Division: {row['division']}\n"
-            f"Unit: {row.get('unit', '')}\n"
-            f"Department: {row.get('department', '')}\n"
-            f"Job Title: {row['job_title']}\n"
-            f"Job Grade: {row.get('job_grade', 'N/A')}\n"
             f"Job Objective: {row.get('job_objective', 'N/A')}\n"
             f"Responsibilities: {resp_text}"
         )
