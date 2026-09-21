@@ -271,6 +271,22 @@ def _parse_bsc_weight(doc_text: str) -> float:
         return 0.0
 
 
+def _get_bsc_weight(doc) -> float:
+    """
+    Read BSC weight from `metadata` (set in bsc_loader.py's to_documents()).
+    Previously _parse_bsc_weight regex-extracted "weight:" from the text
+    field directly — text no longer contains it, since BSC context was
+    trimmed to Strategic Objective + KPI only. _parse_bsc_weight is kept
+    above only in case older, not-yet-re-ingested documents still carry
+    weight in their text; this is the function actually called now.
+    """
+    meta = _get_meta(doc)
+    try:
+        return float(meta.get("weight", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 # =========================================================
 # HELPERS
 # =========================================================
@@ -790,7 +806,7 @@ class QueryExtractor:
 
             # Grade bonus if KPI weight falls in job grade band
             if grade_range:
-                bsc_w = _parse_bsc_weight(_get_text(doc))
+                bsc_w = _get_bsc_weight(doc)
                 if grade_range[0] <= bsc_w <= grade_range[1]:
                     adjusted += GRADE_WEIGHT_BONUS
 
@@ -844,7 +860,7 @@ class QueryExtractor:
             for t in penalise_terms:
                 if t in kpi and not penalised:
                     score += PENALTY_MATCH; penalised = True
-            score += 0.03 * _parse_bsc_weight(_get_text(doc))
+            score += 0.03 * _get_bsc_weight(doc)
             scored[idx] = score
 
         if not scored:

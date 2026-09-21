@@ -234,6 +234,14 @@ class BSCLoader:
         """
         Convert cleaned BSC data into embedding-ready documents
         Returns list of dicts: {text, metadata}
+
+        Text is ONLY Strategic Objective + KPI. Measurement/Target/weight
+        are BSC-level (division-wide) figures, not this specific employee's
+        own numbers — showing them in the model's context risked it
+        treating a division-wide target as if it were personal to this
+        employee. They move into `metadata` instead: weight is still used
+        for grade-band scoring in extractor.py's _retrieve_bsc(), just
+        read from metadata now instead of regex-parsed out of text.
         """
         if self.combined_data is None:
             self.merge_data()
@@ -242,14 +250,14 @@ class BSCLoader:
             text = f"""
             Strategic Objective: {row['strategic_objective']}
             KPI: {row['kpi']}
-            Measurement: {row['measurement']}
-            Target: {row['plan']}
-            weight: {row['weight']}
             """
             metadata = {
                 "source": "BSC",
                 "division": row["division"],
-                "kpi": row["kpi"]
+                "kpi": row["kpi"],
+                "measurement": row["measurement"],
+                "target": row["plan"],
+                "weight": row["weight"],
             }
             documents.append({
                 "text": text.strip(),
