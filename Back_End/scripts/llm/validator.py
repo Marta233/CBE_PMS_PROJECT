@@ -255,6 +255,56 @@ def check_impersonal_voice(drafts: list[dict]) -> list[str]:
     return warnings
 
 
+# ---------------------------------------------------------------------------
+# Step 2 category/weight consistency checks — step2_rules.txt fixes the
+# category AND weight range for certain objective types (W4-W7). The model
+# is told this, but nothing previously checked whether it complied.
+# ---------------------------------------------------------------------------
+
+# (keyword pattern, required category, min weight%, max weight%, rule tag)
+_STEP2_CATEGORY_RULES = (
+    (r"customer satisfaction", "Cannot Exceed", 1, 2, "W7"),
+    (r"compliance|regulatory|security", "Cannot Exceed", 1, 2, "W6"),
+    (r"income|revenue", "Can Exceed", 4, 6, "W4"),
+    (r"new feature|new functionalit", "Can Exceed", 3, 5, "W5"),
+)
+
+
+def check_step2_category_rules(objectives: list[dict]) -> list[str]:
+    """
+    Flag Step 2 objectives whose category or weight contradicts the fixed
+    rules in step2_rules.txt (W4-W7). Keyword-matched on the objective
+    text, so only clear, unambiguous matches are flagged — this won't catch
+    every case, but it catches the common, high-confidence ones (like a
+    Customer Satisfaction goal marked "Can Exceed" instead of "Cannot
+    Exceed", or given a 20% weight instead of 1-2%).
+    """
+    warnings: list[str] = []
+    for i, o in enumerate(objectives, 1):
+        if o.get("category") == "Major Critical":
+            continue
+        text = (o.get("objective") or "").lower()
+        category = (o.get("category") or "").strip()
+        weight = _coerce_weight(o.get("weight_percent"))
+
+        for pattern, required_category, min_w, max_w, tag in _STEP2_CATEGORY_RULES:
+            if not re.search(pattern, text):
+                continue
+            if category and category != required_category:
+                warnings.append(
+                    f"Objective {i} matches step2_rules.txt {tag} (text: "
+                    f"{o.get('objective', '')!r}) but category is {category!r}, "
+                    f"expected {required_category!r}."
+                )
+            if weight is not None and not (min_w <= weight <= max_w):
+                warnings.append(
+                    f"Objective {i} matches step2_rules.txt {tag} but "
+                    f"weight_percent is {weight}%, expected {min_w}-{max_w}%."
+                )
+            break  # only the first matching rule applies
+    return warnings
+
+
 def validate_step1_drafts(drafts: list[dict]) -> list[str]:
     """Run all Step 1 draft-level checks and return a combined warning list."""
     if not drafts:
@@ -403,6 +453,7 @@ def validate_objectives(objectives: list[dict], profile: EmployeeProfile) -> lis
     # text too, in case Step 2 introduced or missed something from Step 1.
     warnings.extend(check_outcome_level(objectives))
     warnings.extend(check_duplicate_drafts(objectives))
+    warnings.extend(check_step2_category_rules(objectives))
 
     for i, o in enumerate(objectives, 1):
         if not o.get("objective", "").strip():

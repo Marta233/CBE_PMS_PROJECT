@@ -6,10 +6,14 @@ GET  /api/jobs/{job_id} — poll async generation jobs
 """
 from __future__ import annotations
 
+import csv
 import json
 import logging
+import os
 import sys
 import threading
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
 from langchain_core.documents import Document
@@ -37,15 +41,57 @@ logger = logging.getLogger("pms.generate")
 router = APIRouter()
 
 _extractor = None
+_extractor_signature: tuple | None = None
+_extractor_lock = threading.Lock()
 
 W = 90
 
 
+def _mtime(path: Path) -> int:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return 0
+
+
+def _knowledge_signature() -> tuple:
+    """
+    Changes whenever ingestion rewrites knowledge_base.json or rebuilds the BSC
+    FAISS index. _get_extractor() compares it, so a re-upload through
+    /api/ingest is picked up WITHOUT restarting the server (previously the
+    extractor was cached forever and kept serving the old documents).
+    """
+    try:
+        faiss_m = max(
+            (_mtime(f) for f in FAISS_INDEX_PATH.rglob("*") if f.is_file()),
+            default=0,
+        )
+    except OSError:
+        faiss_m = 0
+    return (_mtime(KNOWLEDGE_BASE_FILE), faiss_m)
+
+
 def _get_extractor():
-    """Build (or return cached) QueryExtractor from the ingested knowledge base."""
-    global _extractor
-    if _extractor is not None:
+    """
+    Build (or return cached) QueryExtractor from the ingested knowledge base.
+    Rebuilt automatically when knowledge_base.json / the BSC index change on disk.
+    """
+    global _extractor, _extractor_signature
+    signature = _knowledge_signature()
+    if _extractor is not None and signature == _extractor_signature:
         return _extractor
+
+    with _extractor_lock:
+        signature = _knowledge_signature()
+        if _extractor is not None and signature == _extractor_signature:
+            return _extractor  # another request already reloaded it
+        if _extractor is not None:
+            logger.info("Knowledge base changed on disk — reloading extractor …")
+        return _build_extractor(signature)
+
+
+def _build_extractor(signature: tuple):
+    global _extractor, _extractor_signature
 
     from embedding.embedder import PMSVectorStore  # type: ignore
     from embedding.extractor import QueryExtractor, load_knowledge_base  # type: ignore
@@ -69,6 +115,7 @@ def _get_extractor():
     )
 
     bsc_vs = PMSVectorStore(embedding_model=EMBEDDING_MODEL, index_path=FAISS_INDEX_PATH)
+    built_index = False
     if FAISS_INDEX_PATH.exists():
         logger.info("Loading existing BSC FAISS index …")
         bsc_vs.load_vectorstore()
@@ -81,6 +128,7 @@ def _get_extractor():
         if lc_bsc:
             bsc_vs.create_vectorstore(lc_bsc)
             bsc_vs.save_vectorstore()
+            built_index = True
             logger.info("FAISS index built with %s documents.", len(lc_bsc))
 
     _extractor = QueryExtractor(
@@ -89,6 +137,9 @@ def _get_extractor():
         bsc_vectorstore=bsc_vs,
         work_plan_docs=work_plan_docs,
     )
+    # If we just wrote the FAISS index ourselves, re-read the signature so that
+    # write doesn't look like a "change" and trigger a second, pointless reload.
+    _extractor_signature = _knowledge_signature() if built_index else signature
     return _extractor
 
 
@@ -475,7 +526,116 @@ def _build_context(req: GenerateRequest, query: str, payload: dict) -> dict:
     return context
 
 
-def _run_retrieval(query: str):
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _save_retrieval_report(query: str, result, payload: dict, extra: dict | None = None):
+    """
+    Save a readable Markdown report of what was retrieved for this request, to
+    <knowledge base folder>/reports/  (e.g. Data/documents/reports/).
+
+    OFF by default — the CSV in _save_context_csv() is the default saver.
+    Best-effort: a problem here must NEVER break generation.
+      PMS_SAVE_RETRIEVAL_REPORTS=1   turn these Markdown reports ON
+      PMS_REPORTS_KEEP=200           keep only the newest N reports (default 200)
+    """
+    if os.getenv("PMS_SAVE_RETRIEVAL_REPORTS", "0").strip().lower() not in ("1", "true", "yes", "on"):
+        return None
+    try:
+        from embedding.retrieval_report import prune_reports, write_report  # type: ignore
+
+        out_dir = KNOWLEDGE_BASE_FILE.parent / "reports"
+        contexts = {
+            key: payload.get(key, "")
+            for key in ("work_plan_context", "jd_context", "bsc_context", "los_context")
+        }
+        path, checks = write_report(query, result, contexts, out_dir, extra=extra)
+        prune_reports(out_dir, keep=_env_int("PMS_REPORTS_KEEP", 200))
+
+        print(f"\n  Retrieval report saved -> {path}")
+        for level, message in checks:
+            if level == "warn":
+                print(f"    WARNING: {message}")
+        return path, checks
+    except Exception as exc:  # noqa: BLE001 — reporting must not break generation
+        logger.warning("Could not save retrieval report: %s", exc)
+        return None
+
+
+_CSV_COLUMNS = [
+    "timestamp", "employee_id", "fiscal_year",
+    "division", "department", "unit", "job_title", "job_grade",
+    "work_plan_docs", "jd_docs", "bsc_docs", "los_docs",
+    "work_plan_department_detected", "unit_detected",
+    "work_plan_context", "jd_context", "bsc_context", "los_context",
+]
+_csv_lock = threading.Lock()
+
+
+def _csv_safe(value) -> str:
+    """Stop Excel treating a cell as a formula (= + - @): the request fields are user input."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
+
+
+def _write_context_row(path: Path, row: list) -> None:
+    is_new = not path.exists() or path.stat().st_size == 0
+    # utf-8-sig = UTF-8 with a BOM so Excel shows the text correctly (Python writes
+    # the BOM only once, at the start of a new file, even in append mode).
+    with path.open("a", newline="", encoding="utf-8-sig") as fh:
+        writer = csv.writer(fh)
+        if is_new:
+            writer.writerow(_CSV_COLUMNS)
+        writer.writerow(row)
+
+
+def _save_context_csv(result, payload: dict, extra: dict | None = None):
+    """
+    Append ONE ROW PER REQUEST — the exact retrieved context that goes to the LLM —
+    to <knowledge base folder>/retrieved_contexts.csv (e.g. Data/documents/).
+    This is the API-side equivalent of what process_embeddings.py saves.
+
+    Best-effort: a problem here must NEVER break generation.
+      PMS_SAVE_CONTEXT_CSV=0   turn saving off
+    """
+    if os.getenv("PMS_SAVE_CONTEXT_CSV", "1").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    try:
+        extra = extra or {}
+        row = [_csv_safe(v) for v in (
+            datetime.now().isoformat(timespec="seconds"),
+            extra.get("employee_id"), extra.get("fiscal_year"),
+            extra.get("division"), extra.get("department"), extra.get("unit"),
+            extra.get("job_title"), extra.get("job_grade"),
+            payload.get("work_plan_count", 0), 1 if payload.get("jd_found") else 0,
+            payload.get("bsc_count", 0), payload.get("los_count", 0),
+            getattr(result, "detected_work_plan_department", None), getattr(result, "detected_unit", None),
+            payload.get("work_plan_context", ""), payload.get("jd_context", ""),
+            payload.get("bsc_context", ""), payload.get("los_context", ""),
+        )]
+        path = KNOWLEDGE_BASE_FILE.parent / "retrieved_contexts.csv"
+        with _csv_lock:
+            try:
+                _write_context_row(path, row)
+            except PermissionError:
+                # Windows locks a CSV that is open in Excel. Keep the row in a side
+                # file instead of losing it (and instead of failing the request).
+                path = path.with_name(f"{path.stem}_locked_{datetime.now():%Y%m%d_%H%M%S_%f}{path.suffix}")
+                _write_context_row(path, row)
+                logger.warning("retrieved_contexts.csv is open elsewhere (Excel?) - "
+                               "saved this row to %s instead", path.name)
+        print(f"\n  Context saved to CSV -> {path}")
+        return path
+    except Exception as exc:  # noqa: BLE001 — saving must not break generation
+        logger.warning("Could not save context CSV: %s", exc)
+        return None
+
+
+def _run_retrieval(query: str, extra: dict | None = None):
     from embedding.extractor import _get_text  # type: ignore
 
     extractor = _get_extractor()
@@ -501,6 +661,10 @@ def _run_retrieval(query: str):
         "los_count": len(result.los_docs),
         "work_plan_count": len(result.work_plan_docs),
     }
+    _save_context_csv(result, payload, extra)
+    report = _save_retrieval_report(query, result, payload, extra)
+    if report:
+        payload["report_path"] = str(report[0])
     return result, payload
 
 
@@ -568,7 +732,20 @@ def generate(req: GenerateRequest, response: Response):
     _bar()
 
     query = _build_query(req)
-    result, payload = _run_retrieval(query)
+    result, payload = _run_retrieval(
+        query,
+        extra={
+            "source": "POST /api/generate",
+            "employee_id": sanitize_user_field(req.employee_id) if req.employee_id else None,
+            "fiscal_year": req.fiscal_year,
+            "num_objectives": req.num_objectives,
+            "division": sanitize_user_field(req.division),
+            "department": sanitize_user_field(req.department),
+            "unit": sanitize_user_field(req.unit),
+            "job_title": sanitize_user_field(req.job_title),
+            "job_grade": sanitize_user_field(req.job_grade),
+        },
+    )
 
     jd_context, bsc_context, los_context, work_plan_context = _contexts_from_payload(payload)
     _display_retrieved(result, jd_context, bsc_context, los_context, work_plan_context)

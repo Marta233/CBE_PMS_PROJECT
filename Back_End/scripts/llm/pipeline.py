@@ -30,13 +30,20 @@ from .llm_client import LLMUnavailableError, chat_json, check_llm_available
 from .json_utils import build_repair_prompt, parse_llm_json
 from .prompts import build_step1_prompt, build_step2_prompt, build_step3_prompt, build_all_prompts
 from .prompts.loader import step1_json_example, step2_json_example, step3_json_example
-from .validator import normalize_objectives, sum_weights, validate_objectives, validate_step1_drafts
+from .validator import (
+    check_step2_category_rules,
+    normalize_objectives,
+    sum_weights,
+    validate_objectives,
+    validate_step1_drafts,
+)
 
 
 DEFAULT_MODEL = OLLAMA_MODEL
 MAX_JSON_RETRIES = 2
 MAX_STEP_RETRIES = 2
 MAX_STEP1_CONTENT_RETRIES = 2  # separate budget for duplication/outcome-level re-asks
+MAX_STEP2_CONTENT_RETRIES = 2  # separate budget for category/weight-rule re-asks
 APPRAISAL_FIELDS = ("rating_5", "rating_4", "rating_3", "rating_2", "rating_1")
 
 # Bump when prompt templates or fragments change — invalidates prior seeds for audits.
@@ -342,6 +349,91 @@ def _run_step1(
     return drafts, content_issues
 
 
+def _append_step2_feedback(user_prompt: str, issues: list[str]) -> str:
+    """Append named category/weight-rule issues to the Step 2 user prompt for a targeted re-ask."""
+    return (
+        user_prompt
+        + "\n\n"
+        + "━" * 66
+        + "\nYOUR PREVIOUS ATTEMPT HAD THESE PROBLEMS — fix them and resubmit\n"
+        "ALL objectives (not just the ones flagged below):\n"
+        + "━" * 66
+        + "\n"
+        + "\n".join(f"- {issue}" for issue in issues)
+    )
+
+
+def _run_step2(
+    profile: EmployeeProfile,
+    drafts: list[dict],
+    num_objectives: int,
+    *,
+    model: str,
+    seed: int | None,
+) -> tuple[list[dict], list[str]]:
+    """
+    Run Step 2, then validate objective CONTENT against the fixed category/
+    weight rules in step2_rules.txt (W4-W7) and re-ask — with the specific
+    problems named — up to MAX_STEP2_CONTENT_RETRIES times.
+
+    The existing count-check retry (len(objectives) == num_objectives) still
+    runs first inside this loop; content validation only runs once the
+    count is correct.
+
+    Returns (objectives, unresolved_content_warnings) — the warnings list
+    is empty if the final attempt was fully clean.
+    """
+    sys2, base_user2 = build_step2_prompt(profile, drafts)
+    user2 = base_user2
+    objectives: list[dict] = []
+    content_issues: list[str] = []
+
+    total_attempts = MAX_STEP_RETRIES + MAX_STEP2_CONTENT_RETRIES + 1
+    content_retries_used = 0
+
+    for attempt in range(total_attempts):
+        step2 = _call_llm(
+            sys2, user2,
+            model=model, temperature=STRUCTURED_STEP_TEMPERATURE, seed=seed,
+            num_predict=max(3072, num_objectives * 450),
+            schema_example=step2_json_example(
+                profile.critical_weight,
+                profile.remaining_weight,
+                CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
+            ),
+            label="step2_metrics" if attempt == 0 else f"step2_metrics_retry{attempt}",
+        )
+        objectives = step2.get("objectives", [])
+
+        if len(objectives) != num_objectives:
+            # Wrong count — plain retry, no feedback needed (existing behavior).
+            continue
+
+        content_issues = check_step2_category_rules(objectives)
+        if not content_issues:
+            return objectives, []
+
+        content_retries_used += 1
+        if content_retries_used > MAX_STEP2_CONTENT_RETRIES:
+            _step_log(
+                f"  Step 2 note: {len(content_issues)} content-quality issue(s) "
+                "remained after retries; shipping best attempt."
+            )
+            return objectives, content_issues
+
+        _step_log(
+            f"  Step 2 retry {content_retries_used}/{MAX_STEP2_CONTENT_RETRIES}: "
+            f"{len(content_issues)} content-quality issue(s) found, re-asking with feedback ..."
+        )
+        user2 = _append_step2_feedback(base_user2, content_issues)
+
+    if len(objectives) != num_objectives:
+        raise ValueError(
+            f"Step 2 returned {len(objectives)} objectives, expected {num_objectives}."
+        )
+    return objectives, content_issues
+
+
 def generate_objectives(
     context: dict,
     num_objectives: int,
@@ -433,29 +525,15 @@ def generate_objectives(
             }
         )
 
-    # Step 2 — metrics (retry if objective count wrong)
-    sys2, user2 = build_step2_prompt(profile, drafts)
+    # Step 2 — metrics (retry on wrong count, then retry with feedback on
+    # category/weight-rule violations against step2_rules.txt)
+    _, user2_for_meta = build_step2_prompt(profile, drafts)
     objectives: list = []
     _step_log("  Step 2/3: calling LLM (metrics & weights) ...")
-    for attempt in range(MAX_STEP_RETRIES + 1):
-        step2 = _call_llm(
-            sys2, user2,
-            model=model, temperature=STRUCTURED_STEP_TEMPERATURE, seed=seed,
-            num_predict=max(3072, num_objectives * 450),
-            schema_example=step2_json_example(
-                profile.critical_weight,
-                profile.remaining_weight,
-                CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
-            ),
-            label="step2_metrics",
-        )
-        objectives = step2.get("objectives", [])
-        if len(objectives) == num_objectives:
-            break
-    if len(objectives) != num_objectives:
-        raise ValueError(
-            f"Step 2 returned {len(objectives)} objectives, expected {num_objectives}."
-        )
+    objectives, step2_content_warnings = _run_step2(
+        profile, drafts, num_objectives,
+        model=model, seed=seed,
+    )
     if progress_callback:
         progress_callback(
             {
@@ -537,6 +615,8 @@ def generate_objectives(
     warnings = validate_objectives(normalized, profile)
     if step1_content_warnings:
         warnings = [f"[Step 1] {w}" for w in step1_content_warnings] + warnings
+    if step2_content_warnings:
+        warnings = [f"[Step 2] {w}" for w in step2_content_warnings] + warnings
 
     return {
         "employee_profile": {
@@ -570,7 +650,7 @@ def generate_objectives(
             },
             "prompt_chars": {
                 "step1": len(user1_for_meta),
-                "step2": len(user2),
+                "step2": len(user2_for_meta),
                 "step3": len(build_step3_prompt(profile, objectives)[1]),
             },
             "warnings": warnings,

@@ -47,7 +47,7 @@ interface LLMObjective {
   source?:         string;
   bsc_kpi?:                    string;
   bsc_strategic_objective?:    string;
-  los_alignment?:              string;
+  // los_alignment?:              string;
   appraisal_logic?:            AppraisalLogic;
 }
 
@@ -58,7 +58,7 @@ interface BackendObjective {
   source?: string;
   bsc_kpi?: string;
   bsc_strategic_objective?: string;
-  los_alignment?: string;
+  // los_alignment?: string;
   appraisal_logic?: AppraisalLogic;
 }
 
@@ -186,7 +186,7 @@ function fromBackend(b: BackendObjective): LLMObjective {
     source:          b.source,
     bsc_kpi:                    b.bsc_kpi,
     bsc_strategic_objective:    b.bsc_strategic_objective,
-    los_alignment:              b.los_alignment,
+    // los_alignment:              b.los_alignment,
     appraisal_logic:            b.appraisal_logic,
   };
 }
@@ -335,7 +335,7 @@ function downloadCSV(
 
   const objectivesHeader = [
     '#', 'Objective', 'Measure', 'Target', 'Weight (%)', 'Category',
-    'BSC KPI', 'BSC Strategic Objective', 'LOS Alignment',
+    'BSC KPI', 'BSC Strategic Objective',
   ];
   const objectivesBody = rows.map((r, i) => [
     i + 1,
@@ -346,7 +346,7 @@ function downloadCSV(
     esc(r.category),
     esc(r.bsc_kpi ?? ''),
     esc(r.bsc_strategic_objective ?? ''),
-    esc(r.los_alignment ?? ''),
+    // esc(r.los_alignment ?? ''),
   ].join(','));
 
   const appraisalHeader = [
@@ -574,7 +574,7 @@ function ObjectiveFormModal({
       source:                    row?.source,
       bsc_kpi:                   row?.bsc_kpi,
       bsc_strategic_objective:   row?.bsc_strategic_objective,
-      los_alignment:             row?.los_alignment,
+      // los_alignment:             row?.los_alignment,
       appraisal_logic:           row?.appraisal_logic,
     });
   }
@@ -733,7 +733,7 @@ function AppraisalExpandPanel({
   onUpdate: (updated: AppraisalLogic) => void;
 }) {
   const logic = obj.appraisal_logic ?? EMPTY_APPRAISAL;
-  const hasAlignment = !!(obj.bsc_kpi || obj.bsc_strategic_objective || obj.los_alignment);
+  const hasAlignment = !!(obj.bsc_kpi || obj.bsc_strategic_objective);
 
   function updateRating(key: keyof AppraisalLogic, value: string) {
     onUpdate({ ...logic, [key]: value });
@@ -755,12 +755,6 @@ function AppraisalExpandPanel({
               <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">Strategic Objective</p>
                 <p className="text-xs text-slate-700 dark:text-slate-200 leading-snug">{obj.bsc_strategic_objective}</p>
-              </div>
-            )}
-            {obj.los_alignment && (
-              <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">LOS Alignment</p>
-                <p className="text-xs text-slate-700 dark:text-slate-200 leading-snug">{obj.los_alignment}</p>
               </div>
             )}
           </div>
