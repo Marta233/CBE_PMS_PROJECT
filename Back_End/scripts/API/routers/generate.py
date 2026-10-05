@@ -342,6 +342,10 @@ class GenerateRequest(BaseModel):
         default=None,
         description="Performance planning fiscal year (defaults to current calendar year)",
     )
+    continue_without_work_plan: bool = Field(
+        default=False,
+        description="Proceed when no work plan is stored for this unit",
+    )
 
 
 class AppraisalLogic(BaseModel):
@@ -476,7 +480,7 @@ def _build_context(req: GenerateRequest, query: str, payload: dict) -> dict:
 
 
 def _run_retrieval(query: str):
-    from embedding.extractor import _get_text  # type: ignore
+    from embedding.extractor import _get_meta, _get_text  # type: ignore
 
     extractor = _get_extractor()
     print("\n  Running extraction …")
@@ -488,7 +492,12 @@ def _run_retrieval(query: str):
     jd_context = _get_text(result.jd_doc) if result.jd_doc else ""
     bsc_context = "\n\n".join(_get_text(d) for d in result.bsc_docs)
     los_context = "\n\n".join(_get_text(d) for d in result.los_docs)
-    work_plan_context = "\n\n".join(_get_text(d) for d in result.work_plan_docs)
+    work_plan_parts = []
+    for doc in result.work_plan_docs:
+        unit_tag = _get_meta(doc).get("unit", "")
+        body = _get_text(doc)
+        work_plan_parts.append(f"Unit: {unit_tag}\n{body}" if unit_tag else body)
+    work_plan_context = "\n\n".join(work_plan_parts)
 
     payload = {
         "query": query,
@@ -574,7 +583,9 @@ def generate(req: GenerateRequest, response: Response):
     _display_retrieved(result, jd_context, bsc_context, los_context, work_plan_context)
 
     if not payload.get("jd_found"):
-        print(f'\n  No job description found for "{job_title}" — continuing without JD context')
+        detail = _build_retrieval_incomplete_detail(job_title, result)
+        print(f"\n  No job description — blocked generation: {detail['message']}")
+        raise HTTPException(status_code=422, detail=detail)
 
     if int(payload.get("bsc_count", 0)) == 0:
         detail = _build_retrieval_incomplete_detail(job_title, result)
@@ -589,6 +600,20 @@ def generate(req: GenerateRequest, response: Response):
         )
         print("\n  Retrieval empty — blocked generation")
         raise HTTPException(status_code=422, detail=detail)
+
+    if int(payload.get("work_plan_count", 0)) == 0 and not req.continue_without_work_plan:
+        print("\n  No work plan for this unit — waiting for continue")
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "work_plan_missing",
+                "continue_allowed": True,
+                "message": (
+                    "Generation would be better if a work plan were attached for this unit. "
+                    "You can continue without one."
+                ),
+            },
+        )
 
     try:
         check_llm_available()

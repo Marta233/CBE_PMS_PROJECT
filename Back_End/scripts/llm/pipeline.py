@@ -30,7 +30,14 @@ from .llm_client import LLMUnavailableError, chat_json, check_llm_available
 from .json_utils import build_repair_prompt, parse_llm_json
 from .prompts import build_step1_prompt, build_step2_prompt, build_step3_prompt, build_all_prompts
 from .prompts.loader import step1_json_example, step2_json_example, step3_json_example
-from .validator import normalize_objectives, sum_weights, validate_objectives, validate_step1_drafts
+from .validator import (
+    normalize_objectives,
+    step1_schema_issues,
+    step2_schema_issues,
+    sum_weights,
+    validate_objectives,
+    validate_step1_drafts,
+)
 
 
 DEFAULT_MODEL = OLLAMA_MODEL
@@ -40,7 +47,7 @@ MAX_STEP1_CONTENT_RETRIES = 2  # separate budget for duplication/outcome-level r
 APPRAISAL_FIELDS = ("rating_5", "rating_4", "rating_3", "rating_2", "rating_1")
 
 # Bump when prompt templates or fragments change — invalidates prior seeds for audits.
-PROMPT_VERSION = "1.3.0"
+PROMPT_VERSION = "1.4.0"
 STEP1_TEMPERATURE_DEFAULT = 0.3
 STRUCTURED_STEP_TEMPERATURE = 0.0
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -311,9 +318,13 @@ def _run_step1(
             label="step1_draft" if attempt == 0 else f"step1_draft_retry{attempt}",
         )
         drafts = step1.get("drafts", [])
-
-        if len(drafts) < num_drafts:
-            # Wrong count — plain retry, no feedback needed (existing behavior).
+        schema_issues = step1_schema_issues(drafts, num_drafts)
+        if schema_issues:
+            if attempt == total_attempts - 1:
+                raise ValueError(
+                    "Step 1 schema invalid: " + "; ".join(schema_issues[:5])
+                )
+            user1 = _append_step1_feedback(base_user1, schema_issues)
             continue
 
         content_issues = validate_step1_drafts(drafts)
@@ -362,6 +373,7 @@ def generate_objectives(
         context.get("jd_context", ""),
         context.get("bsc_context", ""),
         context.get("los_context", ""),
+        context.get("work_plan_context", ""),
     )
     s1_key = step1_cache_key(
         employee_id=employee_id,
@@ -433,9 +445,11 @@ def generate_objectives(
             }
         )
 
-    # Step 2 — metrics (retry if objective count wrong)
-    sys2, user2 = build_step2_prompt(profile, drafts)
+    # Step 2 — metrics (retry if the JSON shape is wrong; do not gate on weight sum)
+    sys2, base_user2 = build_step2_prompt(profile, drafts, context.get("jd_context", ""))
+    user2 = base_user2
     objectives: list = []
+    schema_issues: list[str] = []
     _step_log("  Step 2/3: calling LLM (metrics & weights) ...")
     for attempt in range(MAX_STEP_RETRIES + 1):
         step2 = _call_llm(
@@ -447,14 +461,16 @@ def generate_objectives(
                 profile.remaining_weight,
                 CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
             ),
-            label="step2_metrics",
+            label="step2_metrics" if attempt == 0 else f"step2_metrics_retry{attempt}",
         )
         objectives = step2.get("objectives", [])
-        if len(objectives) == num_objectives:
+        schema_issues = step2_schema_issues(objectives, num_objectives)
+        if not schema_issues:
             break
-    if len(objectives) != num_objectives:
+        user2 = _append_step1_feedback(base_user2, schema_issues)
+    if schema_issues:
         raise ValueError(
-            f"Step 2 returned {len(objectives)} objectives, expected {num_objectives}."
+            "Step 2 schema invalid: " + "; ".join(schema_issues[:5])
         )
     if progress_callback:
         progress_callback(

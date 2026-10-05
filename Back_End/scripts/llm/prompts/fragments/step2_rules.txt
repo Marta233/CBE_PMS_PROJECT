@@ -27,7 +27,7 @@ The FIRST objective MUST always be:
 
 W1 — Critical target weight is fixed at {critical_weight}%. All other objectives must sum to exactly {remaining_weight}%.
 
-W2 — Primary channel metric (active users, card activation, CBE-Birr users) must receive the HIGHEST weight among non-critical objectives for this band: {primary_channel_weight}%.
+W2 — Give the primary-channel weight ({primary_channel_weight}%) only when the job description shows this role owns that channel metric (active users, card activation, or CBE-Birr users). Otherwise the highest non-critical weight goes to this role's core duty. For reconciliation, that duty is reconciliation quality or timeliness. For card production and distribution, that duty is timely production and delivery: measure = "Time", target = "As per the SDT", not a percentage.
 
 W3 — Document / Report / Proposal goals MUST be split into TWO rows:
   Row A — Quality: measure = "Quality", category = Cannot Exceed
@@ -51,6 +51,9 @@ W8 — Before outputting, verify all non-critical weight_percent values sum to e
 3. TARGET EXPRESSION STANDARDS — use these exact phrases when applicable
 
   • Quantitative channel targets     : "As per quarterly action plan of 100%"
+    Do not replace this with a figure copied from a work plan.
+    Do not invent the quarterly number the action plan does not define.
+  • Card and PIN production/delivery : measure "Time", target "As per the SDT"
   • Document quality                 : "One round review with minor editing"
   • Document time (quarterly)        : "Quarterly as per the time stated on TOR"
   • Document time (monthly)          : "Monthly as per the time stated on TOR"

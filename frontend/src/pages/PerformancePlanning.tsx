@@ -264,6 +264,7 @@ async function callAPI(
   division: string, department: string, unit: string,
   jobTitle: string, jobGrade: string, count: number,
   onProgress?: (partialRows: LLMObjective[], profile: EmployeeProfile, progressText?: string) => void,
+  continueWithoutWorkPlan = false,
 ): Promise<{ objectives: LLMObjective[]; employeeProfile: EmployeeProfile; warning?: string }> {
   let res: Response;
   try {
@@ -273,6 +274,7 @@ async function callAPI(
       body:    JSON.stringify({
         division, department, unit,
         job_title: jobTitle, job_grade: jobGrade, num_objectives: count,
+        continue_without_work_plan: continueWithoutWorkPlan,
       }),
     });
   } catch {
@@ -304,6 +306,18 @@ async function callAPI(
       detail = body.detail ?? body.message ?? null;
     } catch {
       detail = await res.text().catch(() => res.statusText);
+    }
+    if (
+      res.status === 422
+      && typeof detail === 'object'
+      && detail !== null
+      && (detail as Record<string, unknown>).error === 'work_plan_missing'
+    ) {
+      const message = String((detail as Record<string, unknown>).message
+        || 'Generation would be better if a work plan were attached for this unit. You can continue without one.');
+      const notice = new Error(message);
+      (notice as Error & { code?: string }).code = 'work_plan_missing';
+      throw notice;
     }
     throw new Error(friendlyApiError(res.status, detail));
   }
@@ -886,6 +900,7 @@ export default function PerformancePlanning() {
   const [numObjectives, setNumObjectives] = useState(initialDraft?.numObjectives ?? 5);
   const [generating,    setGenerating]    = useState(false);
   const [genError,      setGenError]      = useState<string | null>(null);
+  const [genErrorCode,  setGenErrorCode]  = useState<string | null>(null);
   const [genProgress,   setGenProgress]   = useState<string | null>(null);
 
   const [currentSet,  setCurrentSet]  = useState<ObjectiveSet | null>(initialDraft?.currentSet ?? null);
@@ -918,10 +933,11 @@ export default function PerformancePlanning() {
 
   const canGenerate = !!(division && department && jobTitle);
 
-  async function handleGenerate(isRegen = false) {
+  async function handleGenerate(isRegen = false, continueWithoutWorkPlan = false) {
     if (!canGenerate) return;
     setGenerating(true);
     setGenError(null);
+    setGenErrorCode(null);
     setGenProgress(null);
     try {
       const { objectives: rows, employeeProfile: profile, warning } = await callAPI(
@@ -931,6 +947,7 @@ export default function PerformancePlanning() {
           setObjectives(partialRows);
           setGenProgress(progressText ?? 'Generation in progress...');
         },
+        continueWithoutWorkPlan,
       );
       if (rows.length !== numObjectives) {
         throw new Error(
@@ -953,6 +970,10 @@ export default function PerformancePlanning() {
       }
     } catch (err) {
       console.error('Objective generation failed:', err);
+      const code = err && typeof err === 'object' && 'code' in err
+        ? String((err as { code?: string }).code ?? '')
+        : '';
+      setGenErrorCode(code || null);
       setGenError(err instanceof Error ? err.message : 'We could not generate objectives this time. Please try again.');
     } finally {
       setGenerating(false);
@@ -1176,12 +1197,12 @@ export default function PerformancePlanning() {
               <span>{genError}</span>
             </div>
             <button
-              onClick={() => handleGenerate(objectives.length > 0)}
+              onClick={() => handleGenerate(objectives.length > 0, genErrorCode === 'work_plan_missing')}
               disabled={generating || !canGenerate}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
               style={{ backgroundColor: '#892d8f' }}>
               <RefreshCw size={14} className={generating ? 'animate-spin' : ''} />
-              Retry
+              {genErrorCode === 'work_plan_missing' ? 'Continue' : 'Retry'}
             </button>
           </div>
         )}

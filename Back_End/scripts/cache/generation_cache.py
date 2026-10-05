@@ -20,8 +20,9 @@ def context_fingerprint(
     jd_context: str,
     bsc_context: str,
     los_context: str,
+    work_plan_context: str = "",
 ) -> str:
-    raw = "|".join((jd_context, bsc_context, los_context))
+    raw = "|".join((jd_context, bsc_context, los_context, work_plan_context))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 

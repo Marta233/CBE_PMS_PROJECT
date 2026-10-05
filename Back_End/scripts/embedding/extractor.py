@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from nltk.stem import PorterStemmer
 
@@ -615,11 +614,53 @@ class QueryExtractor:
     def _extract_work_plan_unit(self, unit_text: str) -> Optional[str]:
         """Map free-text unit (e.g. 'Agent Management Unit') to the Work
         Plan's normalized unit tag (Agent/Merchant/Mesob)."""
-        u = _normalize(unit_text)
-        for key, value in self._WORK_PLAN_UNIT_KEYWORDS.items():
-            if key in u:
-                return value
+        allowed = self._allowed_work_plan_units(unit_text)
+        if not allowed:
+            return None
+        for tag in ("Agent", "Merchant", "Mesob", "Mobile Banking", "Internet Banking"):
+            if tag in allowed:
+                return tag
         return None
+
+    def _allowed_work_plan_units(self, unit_text: str) -> Optional[set[str]]:
+        """Stored-unit tags this employee may see.
+
+        None means no unit was given, so department docs are not filtered.
+        An empty set means the name does not match a stored tag.
+        A reconciliation unit only matches a stored tag that is itself a
+        reconciliation plan. It does not inherit Mobile Banking or Agent
+        rows because those words appear in its name.
+        """
+        u = _normalize(unit_text)
+        if not u:
+            return None
+        if "reconciliation" in u:
+            return set()
+        allowed: set[str] = set()
+        has_agent = "agent" in u
+        has_merchant = "merchant" in u
+        has_mobile = "mobile" in u
+        has_internet = "internet" in u
+        if has_agent and not has_merchant:
+            allowed.add("Agent")
+        elif has_merchant and not has_agent:
+            allowed.add("Merchant")
+        elif has_agent and has_merchant:
+            allowed.add("Agent")
+            allowed.add("Merchant")
+        if "mesob" in u:
+            allowed.add("Mesob")
+        if has_internet and not has_mobile:
+            allowed.add("Internet Banking")
+        elif has_mobile and not has_internet:
+            allowed.add("Mobile Banking")
+        elif has_mobile and has_internet:
+            allowed.add("Mobile Banking")
+            allowed.add("Internet Banking")
+        if not allowed:
+            return set()
+        allowed.add("Both")
+        return allowed
 
     def _filter_work_plan(self, department: Optional[str], unit: Optional[str]) -> list:
         """
@@ -643,15 +684,23 @@ class QueryExtractor:
         if not department:
             return []
         dept_norm = _normalize(department)
-        unit_tag = self._extract_work_plan_unit(unit) if unit else None
+        allowed = self._allowed_work_plan_units(unit) if unit else None
+        unit_norm = _normalize(unit) if unit else ""
+        reconciliation_only = "reconciliation" in unit_norm
 
         matched = []
         for doc in self.work_plan_docs:
             meta_dept = _normalize(_get_meta(doc).get("department", ""))
             if meta_dept != dept_norm and dept_norm not in meta_dept:
                 continue
-            doc_unit = _get_meta(doc).get("unit", "")
-            if unit_tag and doc_unit not in (unit_tag, "Both"):
+            doc_unit = str(_get_meta(doc).get("unit", "") or "")
+            if reconciliation_only:
+                stored = _normalize(doc_unit).replace("&", "and")
+                asked = unit_norm.replace("&", "and")
+                if "reconciliation" in stored and (stored in asked or asked in stored):
+                    matched.append(doc)
+                continue
+            if allowed is not None and doc_unit not in allowed:
                 continue
             matched.append(doc)
         return matched
@@ -765,12 +814,24 @@ class QueryExtractor:
 
         logger.info(f"  BSC combined query: {query_text[:120]}")
 
-        # Temp FAISS index for this division
-        temp_vs = FAISS.from_documents(division_docs, self.bsc_vectorstore.embeddings)
-        fetch_k = len(division_docs)
+        # Search the index that is already built. Do not re-embed the division.
+        index = self.bsc_vectorstore.vectorstore
+        ntotal = int(getattr(getattr(index, "index", None), "ntotal", 0) or 0)
+        if ntotal <= 0:
+            logger.warning("  BSC: stored index is empty → keyword fallback")
+            fallback = self._keyword_bsc_fallback(division_docs, query_text, unit, k)
+            return query_text, fallback, [0.0] * len(fallback)
 
-        # Single similarity search
-        results = temp_vs.similarity_search_with_score(query_text, k=fetch_k)
+        prepared = query_text
+        prepare = getattr(self.bsc_vectorstore, "_prepare_query", None)
+        if callable(prepare):
+            prepared = prepare(query_text)
+        results = index.similarity_search_with_score(prepared, k=ntotal)
+        if division:
+            results = [
+                (doc, score) for doc, score in results
+                if _normalize(_get_meta(doc).get("division", "")) == div_norm
+            ]
 
         # Convert L2 distances to similarity scores (0..1)
         scores: dict[str, float] = {}

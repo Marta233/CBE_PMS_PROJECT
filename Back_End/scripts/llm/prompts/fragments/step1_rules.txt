@@ -3,8 +3,15 @@ STEP 1 RULES — draft text and BSC/LOS mapping only
 Do NOT assign weight_percent, measure, target, category, tracking_source,
 time_frame, or appraisal_logic in this step. Those are set in Step 2.
 
-1. Cite a BSC KPI only where one genuinely fits this responsibility;
-   otherwise set bsc_kpi to "N/A".
+1. Choose the task first, from the work plan (priority 1) and the job
+   description (priority 2). Then map a BSC KPI only where that KPI
+   measures this task. Otherwise set bsc_kpi to "N/A". If a strategic
+   objective still fits, keep bsc_strategic_objective; otherwise "N/A".
+   Do not draft a task just because it is a BSC KPI.
+   Do not copy these failures: an ATM hardware-uptime KPI on a settlement
+   goal, a customer-growth KPI on a monitoring goal, a customer-experience
+   KPI on a backlog-control goal, card-acquiring or "new active card users"
+   on card production, or marketing on card production.
 
 2. Add a LOS alignment only where one genuinely fits; otherwise set
    los_alignment to "N/A".
@@ -29,8 +36,8 @@ time_frame, or appraisal_logic in this step. Those are set in Step 2.
 
 
 7. No duplicate or overlapping drafts — including different wording
-   for the same underlying activity (e.g. "Enhance X" and "Optimize X"
-   are the same draft; keep one).
+   for the same underlying activity. "Enhance", "Improve", "Ensure",
+   and "Optimize" of the same activity are one draft; keep one.
 
 8. Impersonal voice, always. Start with an action verb. Never "I",
     "I will", "I'll", or a job-title lead-in before the action.
@@ -47,4 +54,17 @@ time_frame, or appraisal_logic in this step. Those are set in Step 2.
 GRADE BAND GOAL FOCUS for {grade_band}:
 {grade_focus}
 
+The grade-focus line does not create a task. Active-user acquisition,
+card acquiring, and marketing are drafted only when the work plan or
+the job description gives this role that work. Reconciliation keeps
+books, settlement, disputes, reports, and file handling when those are
+in the job description, with bsc_kpi "N/A" when no KPI measures them.
+Card production stays on issuing, production, and distribution.
+
 Do NOT draft objectives that belong to a higher grade band.
+Stay inside this unit. Agent Management does not draft CBE Birr or POS
+merchant goals. A work-plan row tagged Both is used only for the half
+this unit owns. POS Merchant and CBE Birr Merchant may share a Merchant
+tag; prefer lines that name this unit's product.
+Do not copy a monthly or quarterly percentage from the work plan into
+the objective sentence.

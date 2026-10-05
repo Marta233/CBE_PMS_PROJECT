@@ -4,8 +4,21 @@ You receive drafted objectives from Step 1. Assign weight_percent, measure, targ
 category, tracking_source, and time_frame to each draft AND add the fixed critical target.
 
 Apply ALL rules below. You must compute weights — do not leave them blank.
+The job description below is what this role performs. Use it when you choose
+the measure and which goal receives the largest non-critical weight.
+Do not copy monthly or quarterly figures from a work plan into the target.
 
 {step2_rules}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+JOB DESCRIPTION — what this role performs
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{jd_context}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UNIT EXAMPLES — measure and target wording only
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{formatted_samples}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DRAFTS FROM STEP 1

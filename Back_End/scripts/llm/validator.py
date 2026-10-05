@@ -255,6 +255,51 @@ def check_impersonal_voice(drafts: list[dict]) -> list[str]:
     return warnings
 
 
+STEP1_REQUIRED_FIELDS = (
+    "draft_id", "objective", "bsc_kpi", "bsc_strategic_objective", "los_alignment",
+)
+STEP2_REQUIRED_FIELDS = (
+    "objective", "measure", "target", "category", "tracking_source", "time_frame",
+    "bsc_kpi", "bsc_strategic_objective", "los_alignment",
+)
+
+
+def step1_schema_issues(drafts: list, num_drafts: int) -> list[str]:
+    """Required Step 1 shape. Content-quality warnings are separate and may still ship."""
+    if not isinstance(drafts, list):
+        return ["Step 1 response has no drafts list."]
+    if len(drafts) < num_drafts:
+        return [f"Step 1 returned {len(drafts)} drafts, expected at least {num_drafts}."]
+    issues: list[str] = []
+    for i, draft in enumerate(drafts[:num_drafts], 1):
+        if not isinstance(draft, dict):
+            issues.append(f"Draft {i} is not an object.")
+            continue
+        for field in STEP1_REQUIRED_FIELDS:
+            if not str(draft.get(field, "")).strip():
+                issues.append(f"Draft {i} missing {field}.")
+    return issues
+
+
+def step2_schema_issues(objectives: list, num_objectives: int) -> list[str]:
+    """Required Step 2 shape. A weight total other than 100% is not a schema failure."""
+    if not isinstance(objectives, list):
+        return ["Step 2 response has no objectives list."]
+    if len(objectives) != num_objectives:
+        return [f"Step 2 returned {len(objectives)} objectives, expected {num_objectives}."]
+    issues: list[str] = []
+    for i, obj in enumerate(objectives, 1):
+        if not isinstance(obj, dict):
+            issues.append(f"Objective {i} is not an object.")
+            continue
+        if _coerce_weight(obj.get("weight_percent")) is None:
+            issues.append(f"Objective {i} missing a numeric weight_percent.")
+        for field in STEP2_REQUIRED_FIELDS:
+            if not str(obj.get(field, "")).strip():
+                issues.append(f"Objective {i} missing {field}.")
+    return issues
+
+
 def validate_step1_drafts(drafts: list[dict]) -> list[str]:
     """Run all Step 1 draft-level checks and return a combined warning list."""
     if not drafts:

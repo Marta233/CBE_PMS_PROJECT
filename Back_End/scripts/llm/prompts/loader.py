@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+_PLACEHOLDER = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 PROMPTS_DIR = Path(__file__).resolve().parent
 FRAGMENTS_DIR = PROMPTS_DIR / "fragments"
@@ -24,14 +27,25 @@ def load_fragment(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def fill_placeholders(template: str, **kwargs: str) -> str:
+    """Replace known {placeholders}. Inserted values are literal, including braces."""
+    def repl(match: re.Match) -> str:
+        key = match.group(1)
+        if key not in kwargs:
+            raise KeyError(f"Prompt placeholder {{{key}}} has no value")
+        return str(kwargs[key])
+
+    return _PLACEHOLDER.sub(repl, template)
+
+
 def render_template(name: str, **kwargs: str) -> str:
     """Load template and substitute {placeholders}."""
-    return load_template(name).format(**kwargs)
+    return fill_placeholders(load_template(name), **kwargs)
 
 
 def render_fragment(name: str, **kwargs: str) -> str:
     """Load fragment and substitute {placeholders}."""
-    return load_fragment(name).format(**kwargs)
+    return fill_placeholders(load_fragment(name), **kwargs)
 
 
 def format_samples_for_step1(samples: list) -> str:
@@ -49,14 +63,25 @@ def format_samples_for_step1(samples: list) -> str:
     return "\n\n".join(lines) if lines else "  (none available)"
 
 
+def format_samples_for_step2(samples: list, limit: int = 4) -> str:
+    """Step 2 style reference — measure and target from the matched unit only."""
+    lines = []
+    for i, s in enumerate(samples[:limit], 1):
+        lines.append(
+            f"  {i}. {s.get('objective', '')}\n"
+            f"     measure: {s.get('measure', '')} | target: {s.get('target', '')}"
+        )
+    return "\n\n".join(lines) if lines else "  (none available)"
+
+
 def step1_json_example(num_drafts: int) -> str:
     example = {
         "drafts": [
             {
                 "draft_id": f"draft_{i + 1}",
                 "objective": "SMART objective statement",
-                "bsc_kpi": "Exact KPI from BSC context",
-                "bsc_strategic_objective": "Strategic objective from BSC context",
+                "bsc_kpi": "Exact KPI from BSC context, or N/A when none measures this task",
+                "bsc_strategic_objective": "Strategic objective from BSC context, or N/A",
                 "los_alignment": "One sentence or N/A",
             }
             for i in range(min(2, num_drafts))

@@ -3,17 +3,36 @@ STEP 1 — DRAFT OBJECTIVES (text + BSC/LOS mapping only)
 Draft SMART objective statements for this employee. Output draft_id, objective,
 bsc_kpi, bsc_strategic_objective, and los_alignment only — no metric or appraisal fields.
 
+The number of drafts requested is the coverage cap. Fill that many distinct duties.
+Do not try to reproduce every line of an existing manual appraisal.
+
+{step1_rules}
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EMPLOYEE PROFILE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {query}
 Grade band: {grade_band}
 
-{step1_rules}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WORK PLAN — PRIORITY 1, this unit's annual activities
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use this to choose which activities belong to this unit.
+Do not copy monthly or quarterly percentages into the objective sentence.
+{work_plan_context}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-BSC CONTEXT — anchor every draft to one KPI from here
+JOB DESCRIPTION — PRIORITY 2, what this role performs
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+When a work plan is present, keep only the duties this role performs.
+When the work plan says it is not available, draft from this job description.
+{jd_context}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BSC CONTEXT — mapping list only, not a task list
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Do not invent a task because a KPI appears here.
+Attach bsc_kpi only when that KPI measures the task already chosen.
 {bsc_context}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -22,12 +41,7 @@ LOS CONTEXT
 {los_context}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-JD CONTEXT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{jd_context}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STYLE REFERENCE (do NOT copy verbatim)
+STYLE REFERENCE (do NOT copy verbatim; same unit only)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {formatted_samples}
 
