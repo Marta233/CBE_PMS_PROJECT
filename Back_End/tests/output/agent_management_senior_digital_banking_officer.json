@@ -1,0 +1,153 @@
+{
+  "case": {
+    "division": "Digital Banking",
+    "department": "Merchant and Agent Management",
+    "unit": "Agent Management",
+    "job_title": "Senior Digital Banking Officer",
+    "job_grade": "",
+    "num_objectives": 5
+  },
+  "generated_at": "2026-08-20T18:58:51",
+  "api_response": {
+    "employee_profile": {
+      "division": "Digital Banking",
+      "department": "Merchant and Agent Management",
+      "unit": "Agent Management",
+      "job_title": "Senior Digital Banking Officer",
+      "job_grade": 13,
+      "grade_band": "senior_officer"
+    },
+    "objectives": [
+      {
+        "objective": "Achieve team critical target",
+        "measure": "Various",
+        "target": "50% of Manager's target",
+        "weight_percent": 50.0,
+        "category": "Major Critical",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "Fixed",
+        "bsc_kpi": "Team Critical Target",
+        "bsc_strategic_objective": "...",
+        "los_alignment": "N/A",
+        "appraisal_logic": {
+          "rating_5": "Meets Expectations — Achieves 100% or more",
+          "rating_4": "Nearly Meets — Achieves 90–99.9%",
+          "rating_3": "Partially Meets — Achieves 80–89.9%",
+          "rating_2": "Minimally Meets — Achieves 66–79.9%",
+          "rating_1": "Unsatisfactory — Achieves less than 65%"
+        }
+      },
+      {
+        "objective": "Enhance accessibility by recruiting new active agents and increasing their utilization through effective management of controllable and other expenses as per the budget.",
+        "measure": "New Active agents recruitment",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 20.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "New Active agents recruitment",
+        "bsc_strategic_objective": "Enhance Accessibility",
+        "los_alignment": "Aligns with LOS goal of Operational Efficiency and Cost Management",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Improve the productivity of integrated 3rd parties by streamlining their operations and increasing their revenue and profitability through effective management of Merchant and Agents.",
+        "measure": "Digital Transaction",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 10.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Digital Transaction",
+        "bsc_strategic_objective": "Enhance digital channel utilization",
+        "los_alignment": "Supports LOS goal of Increasing revenue and profitability through effective management of Merchant and Agents",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Propose new agent banking ideas and concepts that increase non-interest income and improve the overall performance of the agent banking business.",
+        "measure": "Non-Interest Income Growth",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 5.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Non-Interest Income Growth",
+        "bsc_strategic_objective": "Enhance resource mobilization from Digital channels",
+        "los_alignment": "Aligns with LOS goal of Enhance Revenue Generation",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Develop and implement a POS terminal monitoring tool and agent monitoring tools to enhance the overall performance of the agent banking business and improve customer experience.",
+        "measure": "Amount FCY mobilized through relationships with remittance partners and remittance services, agents abroad",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 5.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Amount FCY mobilized through relationships with remittance partners and remittance services, agents abroad",
+        "bsc_strategic_objective": "Enhance resource mobilization from Digital channels",
+        "los_alignment": "Supports LOS goal of Enhance Financial Inclusion",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      }
+    ],
+    "total_weight": 90.0,
+    "pipeline_meta": {
+      "steps_run": [
+        "step1_draft",
+        "step2_metrics",
+        "step3_appraisal"
+      ],
+      "step1_cache_hit": false,
+      "num_drafts_requested": 4,
+      "num_drafts_received": 4,
+      "num_objectives_received": 5,
+      "prompt_version": "1.1.0",
+      "employee_id": "digital banking|merchant and agent management|agent management|senior digital banking officer|13",
+      "fiscal_year": 2026,
+      "seed": 3779523530879455652,
+      "temperatures": {
+        "step1": 0.3,
+        "step2": 0.0,
+        "step3": 0.0
+      },
+      "prompt_chars": {
+        "step1": 18138,
+        "step2": 7031,
+        "step3": 7401
+      },
+      "warnings": [
+        "Total weight is 90.0% (expected 100%).",
+        "Non-critical weight sum is 40.0% (expected 50%)."
+      ]
+    }
+  }
+}

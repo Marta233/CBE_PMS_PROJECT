@@ -163,7 +163,7 @@ def expand_units(cell, department, division=None) -> list:
     return [u["name"] for u in dept.get("units", []) if u["name"] in paired]
 
 
-def resolve(division="", department="", unit="", trust_unit=False) -> Resolution:
+def resolve(division="", department="", unit="", trust_unit=False, infer_department=True) -> Resolution:
     """
     Canonicalise a triple, filling the parent levels the registry can derive
     (unit -> department -> division) and reporting anything it cannot place.
@@ -174,6 +174,9 @@ def resolve(division="", department="", unit="", trust_unit=False) -> Resolution
     department is corrected (recorded in .corrected). Used by the migration,
     because a unit name is more specific than a department label that was
     mis-inferred by a loader.
+
+    infer_department=False: a blank department is left blank. Job descriptions
+    pass this so a unit name is never used to invent a department.
     """
     r = Resolution()
     division, department, unit = (str(x or "").strip() for x in (division, department, unit))
@@ -199,7 +202,7 @@ def resolve(division="", department="", unit="", trust_unit=False) -> Resolution
         if not r.department:
             r.problems.append(f"unknown department '{department}'"
                               + (f" in division '{r.division}'" if r.division else ""))
-    elif unit:
+    elif unit and infer_department:
         owner = department_of_unit(unit, r.division or None)
         if owner:
             r.division, r.department = owner

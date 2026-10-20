@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  'https://whovwsuqrjhmnfdrlvul.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indob3Z3c3VxcmpobW5mZHJsdnVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNTY1NDMsImV4cCI6MjA5NDYzMjU0M30.dBhVyYxs9LdOw0FuuIBVY9mnbRO4WQfGZq8DjQ8Q-Jk'
-);
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Set SUPABASE_URL and SUPABASE_ANON_KEY before running this script.');
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ── Seed data definitions ──────────────────────────────────────────────────
 

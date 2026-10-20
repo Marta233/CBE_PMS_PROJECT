@@ -1,0 +1,153 @@
+{
+  "case": {
+    "division": "Digital Banking",
+    "department": "Merchant and Agent Management",
+    "unit": "Merchant Management",
+    "job_title": "Team Leader Mobile Money Management",
+    "job_grade": "",
+    "num_objectives": 5
+  },
+  "generated_at": "2026-08-20T18:46:53",
+  "api_response": {
+    "employee_profile": {
+      "division": "Digital Banking",
+      "department": "Merchant and Agent Management",
+      "unit": "Merchant Management",
+      "job_title": "Team Leader Mobile Money Management",
+      "job_grade": 13,
+      "grade_band": "team_leader"
+    },
+    "objectives": [
+      {
+        "objective": "Achieve team critical target",
+        "measure": "Various",
+        "target": "50% of Manager's target",
+        "weight_percent": 50.0,
+        "category": "Major Critical",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "Fixed",
+        "bsc_kpi": "Team Critical Target",
+        "bsc_strategic_objective": "...",
+        "los_alignment": "N/A",
+        "appraisal_logic": {
+          "rating_5": "Meets Expectations — Achieves 100% or more",
+          "rating_4": "Nearly Meets — Achieves 90–99.9%",
+          "rating_3": "Partially Meets — Achieves 80–89.9%",
+          "rating_2": "Minimally Meets — Achieves 66–79.9%",
+          "rating_1": "Unsatisfactory — Achieves less than 65%"
+        }
+      },
+      {
+        "objective": "Recruit and onboard new Mobile Money Merchants to increase accessibility and enhance customer experience",
+        "measure": "New Active CBE-Birr Merchants recruitment",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 20.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "New Active CBE-Birr Merchants recruitment",
+        "bsc_strategic_objective": "Enhance Accessibility",
+        "los_alignment": "Aligns with Division Objective: Enhance Customer Experience in the division",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Develop and implement effective merchant management strategies to optimize replenishment and reduce costs",
+        "measure": "Income From Digital Banking",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 5.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Income From Digital Banking",
+        "bsc_strategic_objective": "Increase income from digital channels",
+        "los_alignment": "Supports Department Objective: Increasing revenue and profitability through effective management of Merchant and Agents",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Monitor and analyze merchant performance to identify areas for improvement and optimize business processes",
+        "measure": "Customer satisfaction score on CBE-Birr",
+        "target": "As per the minimum standard of 80%",
+        "weight_percent": 1.0,
+        "category": "Cannot Exceed",
+        "tracking_source": "Manual",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Customer satisfaction score on CBE-Birr",
+        "bsc_strategic_objective": "Enhance Customer Experience",
+        "los_alignment": "Aligns with Department Objective: Enhance customer engagement and feedback integration",
+        "appraisal_logic": {
+          "rating_5": "Meets Expectations — Achieves 100% of target, full compliance",
+          "rating_4": "Nearly Meets — Achieves 90–99.9% of target",
+          "rating_3": "Partially Meets — Achieves 80–89.9% of target",
+          "rating_2": "Minimally Meets — Achieves 66–79.9% of target",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of target"
+        }
+      },
+      {
+        "objective": "Streamline merchant management processes to improve operational efficiency and reduce costs",
+        "measure": "Active CBE-Birr Merchants",
+        "target": "As per the quarter action plan of [N] new feature(s)",
+        "weight_percent": 3.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Active CBE-Birr Merchants",
+        "bsc_strategic_objective": "Enhance Accessibility",
+        "los_alignment": "Supports Division Objective: Operational Efficiency and Cost Management",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      }
+    ],
+    "total_weight": 79.0,
+    "pipeline_meta": {
+      "steps_run": [
+        "step1_draft",
+        "step2_metrics",
+        "step3_appraisal"
+      ],
+      "step1_cache_hit": false,
+      "num_drafts_requested": 4,
+      "num_drafts_received": 4,
+      "num_objectives_received": 5,
+      "prompt_version": "1.1.0",
+      "employee_id": "digital banking|merchant and agent management|merchant management|team leader mobile money management|13",
+      "fiscal_year": 2026,
+      "seed": 958400560454675740,
+      "temperatures": {
+        "step1": 0.3,
+        "step2": 0.0,
+        "step3": 0.0
+      },
+      "prompt_chars": {
+        "step1": 18304,
+        "step2": 6738,
+        "step3": 7079
+      },
+      "warnings": [
+        "Total weight is 79.0% (expected 100%).",
+        "Non-critical weight sum is 29.0% (expected 50%)."
+      ]
+    }
+  }
+}

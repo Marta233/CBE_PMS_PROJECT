@@ -48,7 +48,8 @@ def get_job(job_id: str) -> Optional[dict[str, Any]]:
                 return json.loads(raw)
         except Exception as exc:
             logger.warning(f"Job get failed: {exc}")
-        return None
+        # Redis missed or errored. A failed setex stores the job in memory only.
+        return _MEMORY_JOBS.get(job_id)
     return _MEMORY_JOBS.get(job_id)
 
 

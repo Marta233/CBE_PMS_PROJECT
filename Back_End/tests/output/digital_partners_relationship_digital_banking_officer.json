@@ -1,0 +1,152 @@
+{
+  "case": {
+    "division": "Digital Banking",
+    "department": "Merchant and Agent Management",
+    "unit": "Digital Partners Relationship",
+    "job_title": "Digital Banking Officer",
+    "job_grade": "",
+    "num_objectives": 5
+  },
+  "generated_at": "2026-08-20T18:37:45",
+  "api_response": {
+    "employee_profile": {
+      "division": "Digital Banking",
+      "department": "Merchant and Agent Management",
+      "unit": "Digital Partners Relationship",
+      "job_title": "Digital Banking Officer",
+      "job_grade": 13,
+      "grade_band": "senior_officer"
+    },
+    "objectives": [
+      {
+        "objective": "Achieve team critical target",
+        "measure": "Various",
+        "target": "50% of Manager's target",
+        "weight_percent": 50.0,
+        "category": "Major Critical",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "Fixed",
+        "bsc_kpi": "Team Critical Target",
+        "bsc_strategic_objective": "...",
+        "los_alignment": "N/A",
+        "appraisal_logic": {
+          "rating_5": "Meets Expectations — Achieves 100% or more",
+          "rating_4": "Nearly Meets — Achieves 90–99.9%",
+          "rating_3": "Partially Meets — Achieves 80–89.9%",
+          "rating_2": "Minimally Meets — Achieves 66–79.9%",
+          "rating_1": "Unsatisfactory — Achieves less than 65%"
+        }
+      },
+      {
+        "objective": "Develop and propose new Digital Partners Relationship ideas and concepts to increase non-interest income",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 20.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Non-Interest Income Growth",
+        "bsc_strategic_objective": "Enhance digital channel utilization",
+        "los_alignment": "Supports the Division Objective: Enhance Customer Experience in the division",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Facilitate partnerships and system integrations with Fin techs & aggregators to improve Digital Partners Relationship efficiency",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 10.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Active 3rd Party Operations",
+        "bsc_strategic_objective": "Ensure Sustainable Profitability",
+        "los_alignment": "Aligns with the Department Objective: Enhance customer engagement and feedback integration",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Identify and analyze various Digital Partners Relationship related issues to propose solutions and improve customer experience",
+        "measure": "Quality",
+        "target": "One round review with minor editing",
+        "weight_percent": 5.0,
+        "category": "Cannot Exceed",
+        "tracking_source": "Manual",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Document Review Quality",
+        "bsc_strategic_objective": "Elevate customer Experience",
+        "los_alignment": "Supports the Unit Objective: Decentralization of super-agents activation",
+        "appraisal_logic": {
+          "rating_5": "Ready after 1st review with minor/no editing",
+          "rating_4": "Minor editing after 2nd review",
+          "rating_3": "Minor editing after 3rd review",
+          "rating_2": "Significant editing after multiple reviews",
+          "rating_1": "Consistently poor quality"
+        }
+      },
+      {
+        "objective": "Develop marketing strategies for Digital Partners Relationship products and services to increase revenue and profitability",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 15.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Non-Interest Income Growth",
+        "bsc_strategic_objective": "Increase income from digital channels",
+        "los_alignment": "Aligns with the Department Objective: Enhance Revenue Generation",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      }
+    ],
+    "total_weight": 100.0,
+    "pipeline_meta": {
+      "steps_run": [
+        "step1_draft",
+        "step2_metrics",
+        "step3_appraisal"
+      ],
+      "step1_cache_hit": false,
+      "num_drafts_requested": 4,
+      "num_drafts_received": 4,
+      "num_objectives_received": 5,
+      "prompt_version": "1.1.0",
+      "employee_id": "digital banking|merchant and agent management|digital partners relationship|digital banking officer|13",
+      "fiscal_year": 2026,
+      "seed": 3424742448501635896,
+      "temperatures": {
+        "step1": 0.3,
+        "step2": 0.0,
+        "step3": 0.0
+      },
+      "prompt_chars": {
+        "step1": 18660,
+        "step2": 6761,
+        "step3": 6991
+      },
+      "warnings": [
+        "Duplicate BSC KPIs detected."
+      ]
+    }
+  }
+}

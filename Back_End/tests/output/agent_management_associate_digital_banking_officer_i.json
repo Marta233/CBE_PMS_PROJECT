@@ -1,0 +1,150 @@
+{
+  "case": {
+    "division": "Digital Banking",
+    "department": "Merchant and Agent Management",
+    "unit": "Agent Management",
+    "job_title": "Associate Digital Banking Officer I",
+    "job_grade": "",
+    "num_objectives": 5
+  },
+  "generated_at": "2026-08-20T18:25:56",
+  "api_response": {
+    "employee_profile": {
+      "division": "Digital Banking",
+      "department": "Merchant and Agent Management",
+      "unit": "Agent Management",
+      "job_title": "Associate Digital Banking Officer I",
+      "job_grade": 13,
+      "grade_band": "senior_officer"
+    },
+    "objectives": [
+      {
+        "objective": "Achieve team critical target",
+        "measure": "Various",
+        "target": "50% of Manager's target",
+        "weight_percent": 50.0,
+        "category": "Major Critical",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "Fixed",
+        "bsc_kpi": "Team Critical Target",
+        "bsc_strategic_objective": "...",
+        "los_alignment": "N/A",
+        "appraisal_logic": {
+          "rating_5": "Meets Expectations — Achieves 100% or more",
+          "rating_4": "Nearly Meets — Achieves 90–99.9%",
+          "rating_3": "Partially Meets — Achieves 80–89.9%",
+          "rating_2": "Minimally Meets — Achieves 66–79.9%",
+          "rating_1": "Unsatisfactory — Achieves less than 65%"
+        }
+      },
+      {
+        "objective": "Recruit and onboard new active agents to enhance accessibility and operational efficiency",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 20.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "New Active agents recruitment",
+        "bsc_strategic_objective": "Enhance Accessibility",
+        "los_alignment": "Supports Division Objective: Operational Efficiency and Cost Management",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Develop and implement effective incentive structures to improve agent performance and customer experience",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 10.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Amount FCY mobilized through relationships with remittance partners and remittance services, agents abroad",
+        "bsc_strategic_objective": "Enhance resource mobilization from Digital channels",
+        "los_alignment": "Aligns with Department Objective: Increasing revenue and profitability through effective management of Merchant and Agents",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Establish and maintain a strong relationship with branches, agents, and districts to improve communication and customer engagement",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 5.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Operational Expense",
+        "bsc_strategic_objective": "Manage Operational Expense",
+        "los_alignment": "Supports Division Objective: Enhance Customer Experience in the division",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      },
+      {
+        "objective": "Design and implement a POS terminal monitoring tool and agent monitoring tools to enhance financial inclusion and customer experience",
+        "measure": "Percentage",
+        "target": "As per quarterly action plan of 100%",
+        "weight_percent": 15.0,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "source": "LLM",
+        "bsc_kpi": "Active Agents Incremental",
+        "bsc_strategic_objective": "Enhance Accessibility",
+        "los_alignment": "Aligns with Department Objective: Enhance Financial Inclusion",
+        "appraisal_logic": {
+          "rating_5": "Exceptional — Exceeds 150% of plan",
+          "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+          "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+          "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+          "rating_1": "Unsatisfactory — Achieves less than 65% of plan"
+        }
+      }
+    ],
+    "total_weight": 100.0,
+    "pipeline_meta": {
+      "steps_run": [
+        "step1_draft",
+        "step2_metrics",
+        "step3_appraisal"
+      ],
+      "step1_cache_hit": false,
+      "num_drafts_requested": 4,
+      "num_drafts_received": 4,
+      "num_objectives_received": 5,
+      "prompt_version": "1.1.0",
+      "employee_id": "digital banking|merchant and agent management|agent management|associate digital banking officer i|13",
+      "fiscal_year": 2026,
+      "seed": 4303248448425081729,
+      "temperatures": {
+        "step1": 0.3,
+        "step2": 0.0,
+        "step3": 0.0
+      },
+      "prompt_chars": {
+        "step1": 17680,
+        "step2": 6827,
+        "step3": 7058
+      },
+      "warnings": []
+    }
+  }
+}
