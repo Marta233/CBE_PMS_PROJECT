@@ -6,7 +6,8 @@ import {
   ThumbsUp, BookOpen, Lightbulb, Download,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { DEPARTMENTS, type FeedbackRecord } from '../types';
+import { type FeedbackRecord } from '../types';
+import { useOrgTree } from '../lib/org';
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
@@ -72,7 +73,8 @@ export default function FeedbackCoaching() {
     setRecords((prev) => prev.filter((r) => r.id !== id));
   }
 
-  const allDepts = Object.values(DEPARTMENTS).flat();
+  const org = useOrgTree();
+  const allDepts = org.divisions.flatMap((division) => org.departments[division] ?? []);
   const filtered = activeType === 'all' ? records : records.filter((r) => r.feedback_type === activeType);
 
   const counts = {

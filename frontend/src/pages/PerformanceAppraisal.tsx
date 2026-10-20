@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Star, Plus, ChevronDown, Trash2, CircleCheck as CheckCircle, Download } from 'lucide-react';
 import Layout from '../components/Layout';
-import { DEPARTMENTS, JOB_TITLES, type PerformanceReview } from '../types';
+import { type PerformanceReview } from '../types';
+import { useOrgTree } from '../lib/org';
 
 const PERIODS = ['Q1 2026', 'Q2 2026', 'H1 2026', 'Annual 2025', 'Annual 2026'];
 
@@ -86,7 +87,8 @@ export default function PerformanceAppraisal() {
     setReviews((prev) => prev.filter((r) => r.id !== id));
   }
 
-  const allDepts = Object.values(DEPARTMENTS).flat();
+  const org = useOrgTree();
+  const allDepts = org.divisions.flatMap((division) => org.departments[division] ?? []);
 
   return (
     <Layout
@@ -128,13 +130,9 @@ export default function PerformanceAppraisal() {
               </div>
               <div>
                 <label className="label">Job Title</label>
-                <div className="relative">
-                  <select value={form.job_title} onChange={(e) => setForm({ ...form, job_title: e.target.value })} className="select-field pr-8">
-                    <option value="">Select title</option>
-                    {JOB_TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                </div>
+                <input type="text" value={form.job_title}
+                  onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+                  className="select-field" placeholder="Type the job title" />
               </div>
               <div>
                 <label className="label">Review Period</label>

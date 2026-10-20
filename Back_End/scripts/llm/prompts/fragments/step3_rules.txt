@@ -4,7 +4,7 @@ Add a complete 5-band appraisal_logic block to EVERY objective. Do not change an
 
 Three category scales exist. Match the category AND measure on each objective exactly.
 
-A. MAJOR CRITICAL (only the fixed "Achieve team critical target")
+A. MAJOR CRITICAL (only when this objective is the critical-target row)
   Rating 5 — Meets Expectations     : Achieves 100% or more (≥ 100% of supervisor's target)
   Rating 4 — Nearly Meets           : Achieves 90–99.9%
   Rating 3 — Partially Meets        : Achieves 80–89.9%
@@ -29,7 +29,7 @@ B. CANNOT EXCEED
 
 C. CAN EXCEED
   Used for: revenue, active user growth, features, 3rd party integrations,
-            time-based document goals, marketing, merchant visits.
+            time-based document goals, marketing, field visits.
   Rating 5 — Exceptional            : Exceeds 150% of plan
   Rating 4 — Above Expectations     : Achieves 125–149.9% of plan
   Rating 3 — Meets Expectations     : Achieves 100–124.9% of plan

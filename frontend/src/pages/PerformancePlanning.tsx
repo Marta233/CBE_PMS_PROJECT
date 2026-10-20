@@ -7,10 +7,8 @@ import {
   FolderOpen, Clock, Trash,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import {
-  DIVISIONS, DEPARTMENTS, UNITS, JOB_TITLES, JOB_TITLES_BY_UNIT,
-  type ObjectiveSet,
-} from '../types';
+import { type ObjectiveSet } from '../types';
+import { useOrgTree } from '../lib/org';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
@@ -913,6 +911,7 @@ export default function PerformancePlanning() {
   const [savedSets, setSavedSets] = useState<SavedObjectiveSet[]>(() => loadSavedSets());
   const [showSavedPanel, setShowSavedPanel] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const org = useOrgTree();
 
   // Auto-save the working draft locally on every change, so nothing is lost
   // on refresh/close. This is separate from the explicit "Saved sets" list.
@@ -923,13 +922,8 @@ export default function PerformancePlanning() {
     });
   }, [division, department, unit, jobTitle, jobGrade, numObjectives, currentSet, employeeProfile, objectives]);
 
-  const availableDepartments = division   ? DEPARTMENTS[division]           || [] : [];
-  const availableUnits       = department ? UNITS[department]               || [] : [];
-  const availableJobTitles   = unit
-    ? JOB_TITLES_BY_UNIT[unit]       || JOB_TITLES
-    : department
-    ? JOB_TITLES_BY_UNIT[department] || JOB_TITLES
-    : JOB_TITLES;
+  const availableDepartments = division   ? org.departments[division] || [] : [];
+  const availableUnits       = department ? org.units[department]     || [] : [];
 
   const canGenerate = !!(division && department && jobTitle);
 
@@ -1104,7 +1098,7 @@ export default function PerformancePlanning() {
                 onChange={e => { setDivision(e.target.value); setDepartment(''); setUnit(''); setJobTitle(''); }}
                 className="select-field pr-8">
                 <option value="">Select division</option>
-                {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                {org.divisions.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             </div>
@@ -1138,13 +1132,8 @@ export default function PerformancePlanning() {
           {/* Job Title */}
           <div>
             <label className="label">Job Title</label>
-            <div className="relative">
-              <select value={jobTitle} onChange={e => setJobTitle(e.target.value)} className="select-field pr-8">
-                <option value="">Select title</option>
-                {availableJobTitles.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
+            <input type="text" value={jobTitle} onChange={e => setJobTitle(e.target.value)}
+              placeholder="Type the job title" className="select-field" />
           </div>
         </div>
 

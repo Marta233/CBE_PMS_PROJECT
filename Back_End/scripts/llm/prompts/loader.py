@@ -60,7 +60,9 @@ def format_samples_for_step1(samples: list) -> str:
         if s.get("source"):
             parts.append(f"     ({s['source']})")
         lines.append("\n".join(parts))
-    return "\n\n".join(lines) if lines else "  (none available)"
+    return "\n\n".join(lines) if lines else (
+        "  No style samples for this unit. Follow the job description, BSC, LOS, and the work plan only."
+    )
 
 
 def format_samples_for_step2(samples: list, limit: int = 4) -> str:
@@ -71,7 +73,9 @@ def format_samples_for_step2(samples: list, limit: int = 4) -> str:
             f"  {i}. {s.get('objective', '')}\n"
             f"     measure: {s.get('measure', '')} | target: {s.get('target', '')}"
         )
-    return "\n\n".join(lines) if lines else "  (none available)"
+    return "\n\n".join(lines) if lines else (
+        "  No style samples for this unit. Follow the job description, BSC, LOS, and the work plan only."
+    )
 
 
 def step1_json_example(num_drafts: int) -> str:
@@ -94,8 +98,25 @@ def step2_json_example(
     critical_weight: int,
     remaining_weight: int,
     supervisor_target: str = "Manager's",
+    include_critical: bool = True,
 ) -> str:
     sample_non_critical = min(20, remaining_weight) if remaining_weight > 0 else 10
+    draft = {
+        "draft_id": "draft_1",
+        "objective": "...",
+        "measure": "Percentage",
+        "target": "As per the source document",
+        "weight_percent": sample_non_critical if include_critical else remaining_weight,
+        "category": "Can Exceed",
+        "tracking_source": "System",
+        "time_frame": "Quarterly",
+        "bsc_kpi": "...",
+        "bsc_strategic_objective": "...",
+        "los_alignment": "...",
+        "source": "LLM",
+    }
+    if not include_critical:
+        return json.dumps({"objectives": [draft], "weight_sum_check": 100}, indent=2)
     return json.dumps({
         "objectives": [
             {
@@ -112,20 +133,7 @@ def step2_json_example(
                 "los_alignment": "N/A",
                 "source": "Fixed",
             },
-            {
-                "draft_id": "draft_1",
-                "objective": "...",
-                "measure": "Percentage",
-                "target": "As per quarterly action plan of 100%",
-                "weight_percent": sample_non_critical,
-                "category": "Can Exceed",
-                "tracking_source": "System",
-                "time_frame": "Quarterly",
-                "bsc_kpi": "...",
-                "bsc_strategic_objective": "...",
-                "los_alignment": "...",
-                "source": "LLM",
-            },
+            draft,
         ],
         "weight_sum_check": 100,
     }, indent=2)
@@ -135,7 +143,34 @@ def step3_json_example(
     critical_weight: int,
     remaining_weight: int,
     supervisor_target: str = "Manager's",
+    include_critical: bool = True,
 ) -> str:
+    if not include_critical:
+        return json.dumps({
+            "objectives": [
+                {
+                    "objective": "...",
+                    "measure": "Percentage",
+                    "target": "As per the source document",
+                    "weight_percent": remaining_weight,
+                    "category": "Can Exceed",
+                    "tracking_source": "System",
+                    "time_frame": "Quarterly",
+                    "bsc_kpi": "...",
+                    "bsc_strategic_objective": "...",
+                    "los_alignment": "N/A",
+                    "source": "LLM",
+                    "appraisal_logic": {
+                        "rating_5": "Exceptional — Exceeds 150% of plan",
+                        "rating_4": "Above Expectations — Achieves 125–149.9% of plan",
+                        "rating_3": "Meets Expectations — Achieves 100–124.9% of plan",
+                        "rating_2": "Below Expectations — Achieves 65–99.9% of plan",
+                        "rating_1": "Unsatisfactory — Achieves less than 65% of plan",
+                    },
+                }
+            ],
+            "total_weight": 100,
+        }, indent=2)
     return json.dumps({
         "objectives": [
             {

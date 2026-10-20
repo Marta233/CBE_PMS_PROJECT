@@ -60,189 +60,39 @@ def _stem_tokens(text: str) -> set:
 
 
 # =========================================================
-# MAPS
+# RETRIEVAL SIGNALS
+# Department identity comes from org_registry.json. Keyword boosts are
+# optional precision hints for units that have an entry in
+# llm/profiles/retrieval_signals.json. A unit with no entry is neutral.
 # =========================================================
-LOS_DEPARTMENT_MAP: dict[str, list[str]] = {
-    "Online Banking": [
-        "online banking", "mobile &internet banking",
-        "mobile & internet banking", "mobile and internet banking",
-        "internet banking", "mobile banking", "mobile &internet",
-    ],
-    "Card": ["card", "card banking", "director card banking", "atm", "atm operations"],
-    "Digital_service_devlopment": ["digital service development", "digital service dev", "dsd"],
-    "Digital Banking Reconciliation": ["digital banking reconciliation", "reconciliation", "dbr"],
-    "Merchant and Agent Management": [
-        "merchant and agent management", "merchant and agent banking",
-        "merchant agent management", "merchant management",
-        "agent management", "pos merchant",
-    ],
-}
+_SIGNALS: Optional[dict] = None
 
-# Same purpose and structure as LOS_DEPARTMENT_MAP above, but keyed to the
-# LITERAL department strings actually stored in Work Plan metadata (set
-# via Data_Ingestion/WP/config.py's DEPARTMENT_ALIASES), not LOS's own
-# canonical taxonomy. This is the fix for a real bug: _filter_work_plan
-# was being called with result.detected_department (LOS's canonical key,
-# e.g. "Online Banking" for Mobile & Internet Banking) while Work Plan
-# documents are tagged with the literal name ("Mobile & Internet
-# Banking") — those two strings never matched, so Work Plan always
-# returned 0 documents regardless of unit filtering.
-WORK_PLAN_DEPARTMENT_MAP: dict[str, list[str]] = {
-    "Mobile & Internet Banking": [
-        "online banking", "mobile &internet banking",
-        "mobile & internet banking", "mobile and internet banking",
-        "internet banking", "mobile banking", "mobile &internet",
-        "mobile banking business", "internet banking business", "Mobile & Internet Banking",
-    ],
-    "Merchant and Agent Management": [
-        "merchant and agent management", "merchant and agent banking",
-        "merchant agent management", "merchant management",
-        "agent management", "pos merchant",
-    ],
-    "Card Banking": ["card banking", "director card banking", "card production", "card and pin"],
-    "Digital Service Development": ["digital service development", "digital service dev", "dsd"],
-    "Digital Banking Reconciliation and Dispute Management": [
-        "digital banking reconciliation", "reconciliation and dispute management",
-    ],
-}
 
-JD_DEPARTMENT_MAP: dict[str, list[str]] = {
-    "Internal Control": ["Internal Control", "Internal Audit", "Control"],
-    "Digital Banking Reconciliation and Dispute Management": [
-        "Digital Banking Reconciliation and Dispute Management",
-        "Digital Banking Reconciliation", "Reconciliation and Dispute Management", "Reconciliation",
-    ],
-    "Merchant and Agent Management": [
-        "Merchant and Agent Management", "Merchant and Agent",
-        "Merchant Management", "Agent Management",
-    ],
-    "Mobile &Internet Banking": [
-        "Mobile and Internet Banking", "Mobile & Internet Banking", "Mobile &Internet Banking",
-    ],
-    "Mobile Money": ["Mobile Money", "Mobile Money Business", "Mobile Payment", "Mobile Money & Payment"],
-    "Card Banking": ["Card Banking", "Card", "Cards", "Card Business"],
-}
+def _org():
+    try:
+        from common import registry
+    except ImportError:
+        import sys
+        ingestion = Path(__file__).resolve().parents[1] / "Data_Ingestion"
+        if str(ingestion) not in sys.path:
+            sys.path.insert(0, str(ingestion))
+        from common import registry
+    return registry
 
-JD_UNIT_MAP: dict[str, list[str]] = {
-    "Internal Control": ["Internal Control"],
-    "Digital Banking Reconciliation and Dispute Management": [
-        "Digital Banking Reconciliation and Dispute Management",
-    ],
-    "Merchant and Agent Reconciliation": [
-        "Merchant and Agent Reconciliation", "Merchant Agent Reconciliation",
-    ],
-    "Mobile and Internet Banking Reconciliation": [
-        "Mobile and Internet Banking Reconciliation",
-        "Mobile & Internet Banking Reconciliation",
-        "Mobile &Internet Banking Reconciliation",
-    ],
-    "International Card Transaction Reconciliation": [
-        "International Card Transaction Reconciliation", "International Card Reconciliation",
-    ],
-    "Domestic Card Transaction Reconciliation": [
-        "Domestic Card Transaction Reconciliation", "Domestic Card Reconciliation",
-    ],
-    "Mobile Money Reconciliation": ["Mobile Money Reconciliation"],
-    "Merchant and Agent Management": ["Merchant and Agent Management"],
-    "Merchant Management": ["Merchant Management"],
-    "Agent Management": ["Agent Management"],
-    "Digital Partners Relationship": ["Digital Partners Relationship", "Partners Relationship"],
-    "Mobile and Internet Banking": [
-        "Mobile and Internet Banking", "Mobile & Internet Banking", "Mobile &Internet Banking",
-    ],
-    "Mobile Banking Business": ["Mobile Banking Business", "Mobile Business", "Mobile Banking"],
-    "Internet Banking Business": ["Internet Banking Business", "Internet Business", "Internet Banking"],
-    "Mobile Money": ["Mobile Money"],
-    "Mobile Money Business": ["Mobile Money Business", "Mobile Money"],
-    "Card Banking": ["Card Banking"],
-    "ATM Operations Support": ["ATM Operations Support", "ATM Support", "ATM Operations"],
-    "Card Banking Business": ["Card Banking Business", "Card Business", "Card Banking"],
-    "Card Production and Distribution": [
-        "Card Production and Distribution", "Card Production", "Card Distribution",
-    ],
-    "Card Issuance Solution Management": [
-        "Card Issuance Solution Management", "Card Issuance Solution", "Issuance Solution",
-    ],
-}
 
-JD_DIVISION_MAP: dict[str, list[str]] = {
-    "RBB": ["RBB", "Retail & Branch Banking", "Retail and Branch Banking", "Retail Banking"],
-    "Digital Banking": ["Digital Banking", "Digital", "Digital Bank"],
-}
-
-UNIT_SYNONYMS: dict[str, list[str]] = {
-    "mobile money": ["cbe birr", "cbe-birr"],
-    "cbe birr":     ["mobile money", "cbe-birr"],
-    "cbe-birr":     ["mobile money", "cbe birr"],
-    "internet banking": ["online banking", "web banking"],
-    "card banking": ["card business", "cards"],
-}
-
-UNIT_KEYWORD_SIGNAL: dict[str, dict[str, list[str]]] = {
-    "mobile banking": {
-        "boost":    ["mobile banking"],
-        "penalise": ["card banking", "internet banking", "cbe-birr",
-                     "agents", "agent ", "merchants", "atm", "pos"],
-    },
-    "internet banking": {
-        "boost":    ["internet banking"],
-        "penalise": ["card banking", "mobile banking users", "cbe-birr",
-                     "agents", "agent ", "merchants", "atm", "pos"],
-    },
-    "mobile money": {
-        "boost":    ["cbe-birr"],
-        "penalise": ["card banking", "mobile banking users", "mobile banking",
-                     "internet banking", "atm", "agents", "agent ",
-                     "merchants", "cbe-birr merchants", "pos"],
-    },
-    "cbe-birr": {
-        "boost":    ["cbe-birr"],
-        "penalise": ["card banking", "mobile banking users", "mobile banking",
-                     "internet banking", "atm", "agents", "agent ",
-                     "merchants", "cbe-birr merchants", "pos"],
-    },
-    "card banking": {
-        "boost":    ["card banking"],
-        "penalise": ["mobile banking", "internet banking", "cbe-birr",
-                     "agents", "agent ", "merchants"],
-    },
-    "atm operations": {
-        "boost":    ["atm"],
-        "penalise": ["mobile banking", "internet banking", "cbe-birr",
-                     "card banking users", "merchants"],
-    },
-    "atm": {
-        "boost":    ["atm"],
-        "penalise": ["mobile banking", "internet banking", "cbe-birr",
-                     "card banking users", "merchants"],
-    },
-    "merchant management": {
-        "boost":    ["cbe-birr merchants", "pos merchant", "merchants"],
-        "penalise": ["mobile banking users", "internet banking users", "mobile banking",
-                     "atm", "internet banking", "card banking users", "card", "pos", "agent"],
-    },
-    "agent management": {
-        "boost":    ["agents", "agent ", "cbe-birr agents"],
-        "penalise": ["mobile banking users", "internet banking users", "mobile banking",
-                     "atm", "internet banking", "card banking users", "pos"],
-    },
-    "Card Production and Distribution": {
-        "boost":    ["card banking"],
-        "penalise": ["mobile banking", "internet banking", "cbe-birr", "agents", "merchants"],
-    },
-    "merchant and agent reconciliation": {
-        "boost":    ["merchant", "agent", "cbe-birr","merchants", "agents"],
-        "penalise": ["mobile banking users", "internet banking users", "mobile banking",
-                     "atm", "internet banking", "card banking users", "card", "pos"],
-    },
-}
-
+def _signal_tables() -> dict:
+    global _SIGNALS
+    if _SIGNALS is None:
+        from llm.profiles.policy import retrieval_signals
+        _SIGNALS = retrieval_signals()
+    return _SIGNALS
 
 def _get_unit_signal(unit: str) -> dict[str, list[str]]:
+    signals = _signal_tables().get("unit_keyword_signal", {})
     unit_norm = _normalize(unit)
-    for key in sorted(UNIT_KEYWORD_SIGNAL, key=len, reverse=True):
-        if key in unit_norm:
-            return UNIT_KEYWORD_SIGNAL[key]
+    for key in sorted(signals, key=len, reverse=True):
+        if key.lower() in unit_norm:
+            return signals[key]
     return {"boost": [], "penalise": []}
 
 
@@ -473,17 +323,20 @@ class QueryExtractor:
         result = ExtractionResult()
         fields = self._parse_query_fields(query)
 
-        result.detected_division        = fields.get("division")
-        result.detected_department_name = fields.get("department") or None
-        result.detected_unit            = fields.get("unit")
+        raw_division = fields.get("division") or ""
+        raw_department = fields.get("department") or ""
+        raw_unit = fields.get("unit") or ""
+        resolved = _org().resolve(raw_division, raw_department, raw_unit)
+        result.detected_division        = resolved.division or raw_division or None
+        result.detected_department_name = resolved.department or raw_department or None
+        result.detected_unit            = resolved.unit or raw_unit or None
         result.detected_job_title       = fields.get("job title")
         result.detected_job_grade       = fields.get("job grade")
-        result.detected_department      = self._detect_los_department(
-            query, raw_department=result.detected_department_name
-        )
-        result.detected_work_plan_department = self._detect_work_plan_department(
-            query, raw_department=result.detected_department_name
-        )
+        # One canonical department for LOS and Work Plan. Alias spellings
+        # (LOS sheet "Online Banking", work-plan "Mobile & Internet Banking")
+        # are matched inside the filters via department_match_keys.
+        result.detected_department = resolved.department or None
+        result.detected_work_plan_department = resolved.department or None
 
         logger.info(
             f"\n  Query fields:\n"
@@ -501,18 +354,16 @@ class QueryExtractor:
             )
             logger.info(f"  LOS docs: {len(result.los_docs)}")
 
-        # Work Plan — PRIORITY 1. Uses its OWN department detection
-        # (WORK_PLAN_DEPARTMENT_MAP), NOT result.detected_department (LOS's
-        # canonical key) — WP documents are tagged with the literal
-        # department name, which LOS's canonical key does not match.
         if result.detected_work_plan_department:
             result.work_plan_docs = self._filter_work_plan(
                 result.detected_work_plan_department, result.detected_unit
             )
             logger.info(f"  Work Plan docs: {len(result.work_plan_docs)}")
         else:
-            logger.warning(f"  Work Plan: department {result.detected_department_name!r} is not in "
-                           f"WORK_PLAN_DEPARTMENT_MAP — no Work Plan retrieved.")
+            logger.warning(
+                f"  Work Plan: department {raw_department!r} is not in the org registry "
+                "— no Work Plan retrieved."
+            )
 
         # JD — fallback chain
         result.jd_doc = self._match_jd_with_fallback(
@@ -550,59 +401,24 @@ class QueryExtractor:
         return fields
 
     # ── Detection helpers ─────────────────────────────────────────────────────
-    def _detect_los_department(self, query: str, raw_department: Optional[str] = None) -> Optional[str]:
-        q_norm = _normalize(query)
-        pairs  = sorted(
-            [(_normalize(kw), dept) for dept, kws in LOS_DEPARTMENT_MAP.items() for kw in kws],
-            key=lambda x: len(x[0]), reverse=True,
-        )
-        for norm_kw, dept in pairs:
-            if norm_kw in q_norm:
-                return dept
-        if raw_department:
-            dept_norm = _normalize(raw_department)
-            for norm_kw, dept in pairs:
-                if norm_kw in dept_norm or dept_norm in norm_kw:
-                    return dept
-        return None
-
-    def _detect_work_plan_department(self, query: str, raw_department: Optional[str] = None) -> Optional[str]:
-        """Same lookup as _detect_los_department, but returns the LITERAL
-        department string stored in Work Plan metadata (WORK_PLAN_DEPARTMENT_MAP),
-        not LOS's canonical key — this is what fixes Work Plan retrieval."""
-        q_norm = _normalize(query)
-        pairs  = sorted(
-            [(_normalize(kw), dept) for dept, kws in WORK_PLAN_DEPARTMENT_MAP.items() for kw in kws],
-            key=lambda x: len(x[0]), reverse=True,
-        )
-        for norm_kw, dept in pairs:
-            if norm_kw in q_norm:
-                return dept
-        if raw_department:
-            dept_norm = _normalize(raw_department)
-            for norm_kw, dept in pairs:
-                if norm_kw in dept_norm or dept_norm in norm_kw:
-                    return dept
-        return None
-
     def _expand_unit_synonyms(self, unit: str) -> str:
         if not unit:
             return ""
         unit_norm  = _normalize(unit)
         expansions = [unit_norm]
-        for key, syns in UNIT_SYNONYMS.items():
+        for key, syns in _signal_tables().get("unit_synonyms", {}).items():
             if key in unit_norm:
                 expansions.extend(syns)
         return " ".join(dict.fromkeys(expansions))
 
     # ── LOS hierarchical scoring  (IMPROVEMENT #4) ───────────────────────────
     def _filter_los_hierarchical(self, department: str, unit: Optional[str] = None) -> list:
-        dept_norm = _normalize(department)
+        dept_keys = _org().department_match_keys(department)
         unit_norm = _normalize(unit) if unit else None
         scored = []
         for doc in self.los_docs:
-            meta_dept = _normalize(_get_meta(doc).get("department", ""))
-            if meta_dept != dept_norm and dept_norm not in meta_dept:
+            meta_dept = _org().loose_key(_get_meta(doc).get("department", ""))
+            if meta_dept not in dept_keys:
                 continue
             score = 1.0
             if unit_norm and unit_norm in _normalize(_get_text(doc)):
@@ -612,69 +428,9 @@ class QueryExtractor:
         return [d for d, _ in scored]
 
     # ── Work Plan filtering — PRIORITY 1, same pattern as LOS ────────────────
-    _WORK_PLAN_UNIT_KEYWORDS: dict[str, str] = {
-        "agent": "Agent",
-        "merchant": "Merchant",
-        "mesob": "Mesob",
-        "mobile": "Mobile Banking",
-        "internet": "Internet Banking",
-    }
-
-    def _extract_work_plan_unit(self, unit_text: str) -> Optional[str]:
-        """Map free-text unit (e.g. 'Agent Management Unit') to the Work
-        Plan's normalized unit tag (Agent/Merchant/Mesob)."""
-        allowed = self._allowed_work_plan_units(unit_text)
-        if not allowed:
-            return None
-        for tag in ("Agent", "Merchant", "Mesob", "Mobile Banking", "Internet Banking"):
-            if tag in allowed:
-                return tag
-        return None
-
-    def _allowed_work_plan_units(self, unit_text: str) -> Optional[set[str]]:
-        """Stored-unit tags this employee may see.
-
-        None means no unit was given, so department docs are not filtered.
-        An empty set means the name does not match a stored tag.
-        A reconciliation unit only matches a stored tag that is itself a
-        reconciliation plan. It does not inherit Mobile Banking or Agent
-        rows because those words appear in its name.
-        """
-        u = _normalize(unit_text)
-        if not u:
-            return None
-        if "reconciliation" in u:
-            return set()
-        allowed: set[str] = set()
-        has_agent = "agent" in u
-        has_merchant = "merchant" in u
-        has_mobile = "mobile" in u
-        has_internet = "internet" in u
-        if has_agent and not has_merchant:
-            allowed.add("Agent")
-        elif has_merchant and not has_agent:
-            allowed.add("Merchant")
-        elif has_agent and has_merchant:
-            allowed.add("Agent")
-            allowed.add("Merchant")
-        if "mesob" in u:
-            allowed.add("Mesob")
-        if has_internet and not has_mobile:
-            allowed.add("Internet Banking")
-        elif has_mobile and not has_internet:
-            allowed.add("Mobile Banking")
-        elif has_mobile and has_internet:
-            allowed.add("Mobile Banking")
-            allowed.add("Internet Banking")
-        if not allowed:
-            return set()
-        allowed.add("Both")
-        return allowed
-
     def _filter_work_plan(self, department: Optional[str], unit: Optional[str]) -> list:
         """
-        Department filtering here is identical to _filter_los_hierarchical:
-        exact or substring match on normalized department.
+        Department filtering matches the registry name or any alias.
 
         Unit filtering is DELIBERATELY a HARD filter, unlike LOS's soft rank
         boost. LOS only nudges a unit-matching doc higher while still
@@ -692,28 +448,40 @@ class QueryExtractor:
         """
         if not department:
             return []
-        dept_norm = _loose_key(department)      # '&Internet' == '& Internet' == 'and Internet'
-        allowed = self._allowed_work_plan_units(unit) if unit else None
-        unit_norm = _normalize(unit) if unit else ""
-        reconciliation_only = "reconciliation" in unit_norm
+        registry = _org()
+        dept_keys = registry.department_match_keys(department)
+        allowed = registry.work_plan_unit_labels(department, unit)
+        allowed_keys = None if allowed is None else {registry.loose_key(label) for label in allowed}
+        shared_keys = {registry.loose_key(token) for token in ("both", "all", "all units", "any")}
+        asked_key = registry.loose_key(unit or "")
+        reconciliation_query = "reconciliation" in asked_key
 
         matched = []
         for doc in self.work_plan_docs:
-            meta_dept = _loose_key(_get_meta(doc).get("department", ""))
-            if meta_dept != dept_norm and dept_norm not in meta_dept:
+            meta = _get_meta(doc)
+            meta_dept = registry.loose_key(meta.get("department", ""))
+            if meta_dept not in dept_keys:
                 continue
-            doc_unit = str(_get_meta(doc).get("unit", "") or "")
-            if reconciliation_only:
-                stored = _normalize(doc_unit).replace("&", "and")
-                asked = unit_norm.replace("&", "and")
-                if "reconciliation" in stored and (stored in asked or asked in stored):
-                    matched.append(doc)
+            doc_unit = str(meta.get("unit", "") or "")
+            doc_unit_key = registry.loose_key(doc_unit)
+            # A shortened reconciliation label still belongs to that unit.
+            # It must not pull Agent or Merchant rows that merely share a word.
+            if (
+                reconciliation_query
+                and "reconciliation" in doc_unit_key
+                and (doc_unit_key in asked_key or asked_key in doc_unit_key)
+            ):
+                matched.append(doc)
                 continue
             # A plan whose docx has no Unit column is filed under the department
-            # name (see work_plan_loader.py). It is department-wide, so it applies
-            # to every unit of that department, like "Both".
-            department_wide = _loose_key(doc_unit) == meta_dept
-            if allowed is not None and doc_unit not in allowed and not department_wide:
+            # name. It applies to every unit of that department.
+            # "Both" passes only for a unit the registry knows. An unknown unit
+            # does not inherit shared rows.
+            if allowed:
+                department_wide = doc_unit_key in dept_keys or doc_unit_key in shared_keys
+            else:
+                department_wide = doc_unit_key in dept_keys
+            if allowed_keys is not None and doc_unit_key not in allowed_keys and not department_wide:
                 continue
             matched.append(doc)
         if not matched:
@@ -731,9 +499,9 @@ class QueryExtractor:
             m = _get_meta(d)
             key = (str(m.get("department", "")), str(m.get("unit", "")))
             stored[key] = stored.get(key, 0) + 1
-        dept_norm = _loose_key(department)
+        dept_keys = _org().department_match_keys(department)
         same_dept = {k: n for k, n in stored.items()
-                     if _loose_key(k[0]) == dept_norm or dept_norm in _loose_key(k[0])}
+                     if _org().loose_key(k[0]) in dept_keys}
         if not same_dept:
             logger.warning(f"  Work Plan: nothing is stored for department {department!r}. "
                            f"Departments in the knowledge base: {sorted({k[0] for k in stored})}")
@@ -1030,9 +798,8 @@ class QueryExtractor:
 
     # ── LOS simple filter (kept for compatibility) ────────────────────────────
     def _filter_los(self, department: str) -> list:
-        dept_norm = _normalize(department)
+        dept_keys = _org().department_match_keys(department)
         return [
             doc for doc in self.los_docs
-            if dept_norm in _normalize(_get_meta(doc).get("department", ""))
-            or _normalize(_get_meta(doc).get("department", "")) in dept_norm
+            if _org().loose_key(_get_meta(doc).get("department", "")) in dept_keys
         ]

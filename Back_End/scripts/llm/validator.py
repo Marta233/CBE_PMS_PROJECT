@@ -434,7 +434,7 @@ def validate_objectives(objectives: list[dict], profile: EmployeeProfile) -> lis
             f"Non-critical weight sum is {nc_sum}% (expected {profile.remaining_weight}%)."
         )
 
-    if objectives[0].get("category") != "Major Critical":
+    if profile.has_grade_policy and objectives[0].get("category") != "Major Critical":
         warnings.append("First objective is not Major Critical (critical target).")
 
     kpis = [

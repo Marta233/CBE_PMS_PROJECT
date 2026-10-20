@@ -246,6 +246,92 @@ def resolve(division="", department="", unit="", trust_unit=False, infer_departm
     return r
 
 
+def department_match_keys(name) -> set:
+    """Loose keys of a department's canonical name and every alias.
+
+    A document tagged 'Online Banking' matches Mobile & Internet Banking
+    because that spelling is an alias. Product words are not aliases.
+    """
+    if not str(name or "").strip():
+        return set()
+    wanted = loose_key(name)
+    for div in _load()["raw"]["divisions"]:
+        for dept in div.get("departments", []):
+            phrases = [dept["name"], *dept.get("aliases", [])]
+            if wanted in {loose_key(p) for p in phrases}:
+                return {loose_key(p) for p in phrases if loose_key(p)}
+    canon = canon_department(name)
+    if canon and canon != name:
+        return department_match_keys(canon)
+    return {wanted} if wanted else set()
+
+
+def work_plan_unit_labels(department, unit, division=None):
+    """Labels a Work Plan unit cell may use for this employee.
+
+    None means no unit was given, so department documents are not filtered.
+    An empty set means the unit is not in the registry.
+    'Both' always passes for a known unit.
+    """
+    if not str(unit or "").strip():
+        return None
+    canon = canon_department(department, division) or department
+    hits = _load()["dept"].get(loose_key(canon), [])
+    if division:
+        dn = canon_division(division)
+        hits = [h for h in hits if h[0]["name"] == dn]
+    if len(hits) != 1:
+        return set()
+    node = _find_unit(hits[0][1], unit)
+    if not node:
+        return set()
+    labels = {node["name"], "Both", *(node.get("aliases") or [])}
+    return {label for label in labels if str(label).strip()}
+
+
+def sibling_unit_names(department, unit="", division=None) -> list:
+    """Other units in the same department, for the stay-inside-this-unit rule."""
+    canon = canon_department(department, division) or ""
+    hits = _load()["dept"].get(loose_key(canon or department), [])
+    if division:
+        dn = canon_division(division)
+        hits = [h for h in hits if h[0]["name"] == dn]
+    if len(hits) != 1:
+        return []
+    dept = hits[0][1]
+    current = _find_unit(dept, unit) if unit else None
+    current_name = current["name"] if current else ""
+    return [u["name"] for u in dept.get("units", []) if u["name"] != current_name]
+
+
+def infer_department_from_text(text) -> Optional[str]:
+    """Longest department or unit name/alias contained in free text.
+
+    Used when a job description leaves Department blank. A longer unit name
+    wins over a short alias, so a reconciliation unit is not filed as Card
+    just because the word card appears in it.
+    """
+    hay = f" {loose_key(text)} "
+    if hay.strip() == "":
+        return None
+    best_len = 0
+    best = None
+    for div in _load()["raw"]["divisions"]:
+        for dept in div.get("departments", []):
+            phrases = [dept["name"], *dept.get("aliases", [])]
+            for unit in dept.get("units", []):
+                phrases.append(unit["name"])
+                phrases.extend(unit.get("aliases") or [])
+            for phrase in phrases:
+                key = loose_key(phrase)
+                if len(key) < 4 or f" {key} " not in hay:
+                    continue
+                if len(key) > best_len:
+                    best_len = len(key)
+                    best = dept["name"]
+    return best
+
+
 def list_tree() -> list:
     """Division -> department -> unit tree for upload dropdowns (GET /api/registry)."""
     out = []

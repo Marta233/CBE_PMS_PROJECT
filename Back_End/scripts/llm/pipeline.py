@@ -25,7 +25,7 @@ from cache.generation_cache import (
     step1_cache_key,
 )
 
-from .config.grade_bands import CRITICAL_TARGET_ROLE_LABEL, EmployeeProfile, parse_employee_query
+from .config.grade_bands import EmployeeProfile, draft_count, parse_employee_query
 from .llm_client import LLMUnavailableError, chat_json, check_llm_available
 from .json_utils import build_repair_prompt, parse_llm_json
 from .prompts import build_step1_prompt, build_step2_prompt, build_step3_prompt, build_all_prompts
@@ -47,7 +47,7 @@ MAX_STEP1_CONTENT_RETRIES = 2  # separate budget for duplication/outcome-level r
 APPRAISAL_FIELDS = ("rating_5", "rating_4", "rating_3", "rating_2", "rating_1")
 
 # Bump when prompt templates or fragments change — invalidates prior seeds for audits.
-PROMPT_VERSION = "1.4.0"
+PROMPT_VERSION = "1.5.0"
 STEP1_TEMPERATURE_DEFAULT = 0.3
 STRUCTURED_STEP_TEMPERATURE = 0.0
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -230,7 +230,8 @@ def _run_step3(
     schema = step3_json_example(
         profile.critical_weight,
         profile.remaining_weight,
-        CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
+        profile.supervisor_target,
+        include_critical=profile.has_grade_policy,
     )
     sys3, user3 = build_step3_prompt(profile, objectives)
     _step_log("  Step 3/3: calling LLM (appraisal logic) ...")
@@ -362,7 +363,7 @@ def generate_objectives(
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     profile = parse_employee_query(context.get("query", ""))
-    num_drafts = max(1, num_objectives - 1)
+    num_drafts = draft_count(num_objectives, profile.has_grade_policy)
     employee_id, fiscal_year, seed = _resolve_generation_context(context, profile)
 
     check_llm_available(model)
@@ -459,7 +460,8 @@ def generate_objectives(
             schema_example=step2_json_example(
                 profile.critical_weight,
                 profile.remaining_weight,
-                CRITICAL_TARGET_ROLE_LABEL.get(profile.grade_band, "Manager's"),
+                profile.supervisor_target,
+                include_critical=profile.has_grade_policy,
             ),
             label="step2_metrics" if attempt == 0 else f"step2_metrics_retry{attempt}",
         )
@@ -603,6 +605,6 @@ def get_prompt_preview(context: dict, num_objectives: int) -> dict[str, str]:
         "step1_user": prompts["step1_draft"][1],
         "step2_user": prompts["step2_metrics"][1],
         "step3_user": prompts["step3_appraisal"][1],
-        "num_drafts": str(max(1, num_objectives - 1)),
+        "num_drafts": str(draft_count(num_objectives, profile.has_grade_policy)),
         "remaining_weight": str(profile.remaining_weight),
     }

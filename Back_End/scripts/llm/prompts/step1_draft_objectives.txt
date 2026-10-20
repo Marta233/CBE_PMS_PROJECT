@@ -46,7 +46,7 @@ STYLE REFERENCE (do NOT copy verbatim; same unit only)
 {formatted_samples}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT — exactly {num_drafts} drafts for {unit} (critical target excluded)
+{draft_heading}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Return exactly {num_drafts} draft objects. Example shows structure; include draft_1 through draft_{num_drafts}.
 

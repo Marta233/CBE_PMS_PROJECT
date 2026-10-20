@@ -1,0 +1,10 @@
+{
+  "Agent Management": "Stay inside Agent Management. Do not draft CBE Birr or POS merchant goals. A work-plan row tagged Both is used only for the half this unit owns. Prefer lines that name this unit's product.",
+  "Merchant Management": "POS Merchant and CBE Birr Merchant may share a Merchant tag; prefer lines that name this unit's product. Do not draft Agent Management goals. A work-plan row tagged Both is used only for the half this unit owns.",
+  "Card Production and Distribution": "Card production stays on issuing, production, and distribution. Do not attach card-acquiring, new active card users, or marketing KPIs to a production task. For production and delivery, measure is Time and the target is As per the SDT, not a percentage.",
+  "Domestic Card Transaction Reconciliation": "Reconciliation keeps books, settlement, disputes, reports, and file handling when those are in the job description, with bsc_kpi N/A when no KPI measures them. The core duty is reconciliation quality or timeliness.",
+  "International Card Transaction Reconciliation": "Reconciliation keeps books, settlement, disputes, reports, and file handling when those are in the job description, with bsc_kpi N/A when no KPI measures them. The core duty is reconciliation quality or timeliness.",
+  "Merchant and Agent Reconciliation": "Reconciliation keeps books, settlement, disputes, reports, and file handling when those are in the job description, with bsc_kpi N/A when no KPI measures them. The core duty is reconciliation quality or timeliness. Do not draft Agent Management or Merchant Management product goals.",
+  "Mobile Money Reconciliation": "Reconciliation keeps books, settlement, disputes, reports, and file handling when those are in the job description, with bsc_kpi N/A when no KPI measures them. The core duty is reconciliation quality or timeliness.",
+  "Mobile and Internet Banking Reconciliation": "Reconciliation keeps books, settlement, disputes, reports, and file handling when those are in the job description, with bsc_kpi N/A when no KPI measures them. The core duty is reconciliation quality or timeliness."
+}

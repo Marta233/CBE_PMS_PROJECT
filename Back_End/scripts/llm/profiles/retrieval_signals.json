@@ -1,0 +1,55 @@
+{
+  "unit_synonyms": {
+    "mobile money": ["cbe birr", "cbe-birr"],
+    "cbe birr": ["mobile money", "cbe-birr"],
+    "cbe-birr": ["mobile money", "cbe birr"],
+    "internet banking": ["online banking", "web banking"],
+    "card banking": ["card business", "cards"]
+  },
+  "unit_keyword_signal": {
+    "mobile banking": {
+      "boost": ["mobile banking"],
+      "penalise": ["card banking", "internet banking", "cbe-birr", "agents", "agent ", "merchants", "atm", "pos"]
+    },
+    "internet banking": {
+      "boost": ["internet banking"],
+      "penalise": ["card banking", "mobile banking users", "cbe-birr", "agents", "agent ", "merchants", "atm", "pos"]
+    },
+    "mobile money": {
+      "boost": ["cbe-birr"],
+      "penalise": ["card banking", "mobile banking users", "mobile banking", "internet banking", "atm", "agents", "agent ", "merchants", "cbe-birr merchants", "pos"]
+    },
+    "cbe-birr": {
+      "boost": ["cbe-birr"],
+      "penalise": ["card banking", "mobile banking users", "mobile banking", "internet banking", "atm", "agents", "agent ", "merchants", "cbe-birr merchants", "pos"]
+    },
+    "card banking": {
+      "boost": ["card banking"],
+      "penalise": ["mobile banking", "internet banking", "cbe-birr", "agents", "agent ", "merchants"]
+    },
+    "atm operations": {
+      "boost": ["atm"],
+      "penalise": ["mobile banking", "internet banking", "cbe-birr", "card banking users", "merchants"]
+    },
+    "atm": {
+      "boost": ["atm"],
+      "penalise": ["mobile banking", "internet banking", "cbe-birr", "card banking users", "merchants"]
+    },
+    "merchant management": {
+      "boost": ["cbe-birr merchants", "pos merchant", "merchants"],
+      "penalise": ["mobile banking users", "internet banking users", "mobile banking", "atm", "internet banking", "card banking users", "card", "pos", "agent"]
+    },
+    "agent management": {
+      "boost": ["agents", "agent ", "cbe-birr agents"],
+      "penalise": ["mobile banking users", "internet banking users", "mobile banking", "atm", "internet banking", "card banking users", "pos"]
+    },
+    "Card Production and Distribution": {
+      "boost": ["card banking"],
+      "penalise": ["mobile banking", "internet banking", "cbe-birr", "agents", "merchants"]
+    },
+    "merchant and agent reconciliation": {
+      "boost": ["merchant", "agent", "cbe-birr", "merchants", "agents"],
+      "penalise": ["mobile banking users", "internet banking users", "mobile banking", "atm", "internet banking", "card banking users", "card", "pos"]
+    }
+  }
+}

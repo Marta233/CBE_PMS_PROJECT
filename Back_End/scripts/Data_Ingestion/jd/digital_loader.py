@@ -136,43 +136,67 @@ def _extract_reports_to(block: str) -> str:
 # ─────────────────────────────────────────────────────────────
 
 def _extract_department_from_context(block: str) -> str:
+    """Department from the field, else the longest registry name in the unit or reports-to line."""
+    try:
+        from common import registry
+    except ImportError:
+        from Data_Ingestion.common import registry
+
     dept_val = _extract_field(block, "Department")
     if dept_val and len(dept_val) > 3:
-        return dept_val
+        return registry.canon_department(dept_val) or dept_val
 
-    reports_to = _extract_reports_to(block).lower()
-    unit = (_extract_field(block, "Unit") or "").lower()
+    unit = _extract_field(block, "Unit") or ""
+    reports_to = _extract_reports_to(block)
+    owner = registry.department_of_unit(unit) if unit else None
+    if owner:
+        return owner[1]
+    text = f"{unit} {reports_to}"
+    return registry.infer_department_from_text(text) or _fallback_department(text)
 
-    if any(k in unit or k in reports_to for k in [
-        "merchant and agent reconciliation",
-        "mobile and internet banking reconciliation",
-        "international card transaction reconciliation",
-        "domestic card transaction reconciliation",
-        "mobile money reconciliation",
-    ]):
-        return "Digital Banking Reconciliation and Dispute Management"
 
-    if any(k in unit or k in reports_to for k in [
-        "merchant management", "agent management",
-        "digital partners", "pos merchant",
-    ]):
-        return "Merchant and Agent Management"
+# Phrases that are not registry aliases. Used only when the registry cannot
+# place the JD, so existing files that say "CBE Birr" or "POS merchant" still
+# land in the same department. Reconciliation is checked first.
+_FALLBACK_DEPARTMENTS = (
+    (
+        (
+            "merchant and agent reconciliation",
+            "mobile and internet banking reconciliation",
+            "international card transaction reconciliation",
+            "domestic card transaction reconciliation",
+            "mobile money reconciliation",
+        ),
+        "Digital Banking Reconciliation and Dispute Management",
+    ),
+    (
+        ("merchant management", "agent management", "digital partners", "pos merchant"),
+        "Merchant and Agent Management",
+    ),
+    (
+        ("mobile banking", "internet banking"),
+        "Mobile & Internet Banking",
+    ),
+    (
+        ("mobile money", "cbe-birr", "cbe birr"),
+        "Mobile Money",
+    ),
+    (
+        ("atm", "card banking", "card production", "card distribution", "card issuance", "card and pin"),
+        "Card Banking",
+    ),
+    (
+        ("internal control",),
+        "Internal Control",
+    ),
+)
 
-    if any(k in unit or k in reports_to for k in ["mobile banking", "internet banking"]):
-        return "Mobile &Internet Banking"
 
-    if any(k in unit or k in reports_to for k in ["mobile money", "cbe-birr", "cbe birr"]):
-        return "Mobile Money"
-
-    if any(k in unit or k in reports_to for k in [
-        "atm", "card banking", "card production",
-        "card distribution", "card issuance", "card and pin",
-    ]):
-        return "Card Banking"
-
-    if "internal control" in unit or "internal control" in reports_to:
-        return "Internal Control"
-
+def _fallback_department(text: str) -> str:
+    hay = text.lower()
+    for phrases, department in _FALLBACK_DEPARTMENTS:
+        if any(phrase in hay for phrase in phrases):
+            return department
     return ""
 
 

@@ -30,10 +30,17 @@ _QUARTER_ORDER = ("Q1", "Q2", "Q3", "Q4")
 
 
 def _norm_unit(raw_unit: str) -> str:
-    """Normalize free-text Unit column values into a small fixed set of keys."""
+    """Normalize free-text Unit column values into a small fixed set of keys.
+
+    Reconciliation units keep their full name. Checking "agent" or "merchant"
+    first would store "Merchant and Agent Reconciliation" as "Agent" and file
+    it under Merchant and Agent Management.
+    """
     u = raw_unit.strip().lower()
     if "both" in u:
         return "Both"
+    if "reconciliation" in u:
+        return raw_unit.strip()
     if "mesob" in u:
         return "Mesob"
     if "agent" in u:
@@ -46,6 +53,27 @@ def _norm_unit(raw_unit: str) -> str:
 def _loose_key(text) -> str:
     """Comparison key that ignores case and how '&' is spelled/spaced."""
     return re.sub(r"\s+", " ", str(text or "").replace("&", " and ")).strip().lower()
+
+
+def _org():
+    try:
+        from common import registry
+    except ImportError:
+        from Data_Ingestion.common import registry
+    return registry
+
+
+def _canonical_department(name: str) -> str:
+    """Registry name for a title or unit cell. Blank when nothing matches."""
+    registry = _org()
+    text = str(name or "").strip()
+    if not text:
+        return ""
+    canon = registry.canon_department(text)
+    if canon:
+        return canon
+    owner = registry.department_of_unit(text)
+    return owner[1] if owner else ""
 
 
 def _clean_target_phrase(text: str) -> str:
@@ -71,10 +99,6 @@ class WorkPlanLoader:
         """
         self.file_path = Path(file_path)
         self.config = config or {}
-        # UNIT -> DEPARTMENT, decided per row at ingestion (see config.UNIT_DEPARTMENT_MAP)
-        self.unit_departments = {
-            _loose_key(k): v for k, v in (self.config.get("UNIT_DEPARTMENT_MAP") or {}).items()
-        }
         self.doc = None
         self.department = None
         self.fiscal_year = None
@@ -165,13 +189,8 @@ class WorkPlanLoader:
         return entries
 
     def _department_for(self, unit: str) -> str:
-        """
-        The department a row is filed under. The unit wins: a unit listed in
-        UNIT_DEPARTMENT_MAP (e.g. 'Mobile Banking' -> 'Mobile & Internet Banking')
-        belongs to that department whatever the docx title / file name says, or even
-        if they say nothing. Otherwise the title / file-name department is used.
-        """
-        return self.unit_departments.get(_loose_key(unit)) or self.department or ""
+        """The unit's registry department wins. Otherwise the document title is used."""
+        return _canonical_department(unit) or self.department or ""
 
     def clean(self) -> "WorkPlanLoader":
         """Parse the loaded docx into department metadata + flat unit-tagged entries."""
@@ -193,10 +212,10 @@ class WorkPlanLoader:
             self.department = re.split(
                 r"_?work[_\s-]*plan", self.file_path.stem, flags=re.IGNORECASE
             )[0].strip("_ -")
-        # A blank department here is no longer fatal by itself: the rows' units may still
-        # name it (UNIT_DEPARTMENT_MAP). It is only an error if some row ends up without one.
-        aliases = {k.lower(): v for k, v in self.config.get("DEPARTMENT_ALIASES", {}).items()}
-        self.department = aliases.get(self.department.lower(), self.department)
+        # A blank department here is no longer fatal by itself: a row's unit may
+        # still name one in the org registry. It is only an error if some row
+        # ends up without one.
+        self.department = _canonical_department(self.department) or self.department
         fy_line = next((t for t in title_paragraphs if re.search(r"\d{4}/\d{2,4}", t)), "")
         fy_match = re.search(r"\d{4}/\d{2,4}", fy_line)
         self.fiscal_year = fy_match.group(0) if fy_match else ""
@@ -216,9 +235,9 @@ class WorkPlanLoader:
             raise ValueError(
                 f"Could not determine the department of {self.file_path.name!r}: its title and file name "
                 f"don't name one"
-                + (f", and the unit(s) {blank_units} are not in UNIT_DEPARTMENT_MAP" if blank_units else "")
-                + ". Name the department in the title, or add the unit to UNIT_DEPARTMENT_MAP "
-                  "(Data_Ingestion/WP/config.py)."
+                + (f", and the unit(s) {blank_units} are not in the org registry" if blank_units else "")
+                + ". Name the department in the title, or add the unit to "
+                  "Data_Ingestion/common/org_registry.json."
             )
         if not self.department:  # label for the log only; each row keeps its own department
             self.department = Counter(e["department"] for e in self.entries).most_common(1)[0][0]

@@ -9,7 +9,7 @@ import {
   CircleCheck as CheckCircle, Clock, ChevronDown,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { DIVISIONS, DEPARTMENTS } from '../types';
+import { useOrgTree } from '../lib/org';
 
 const COLORS = ['#2596be', '#10b981', '#f59e0b', '#ef4444', '#1e7ea3', '#06b6d4'];
 
@@ -136,7 +136,8 @@ export default function Dashboard() {
   // Performance chart: always shows sample data (no DB)
   const perfChartData = useMemo(() => SAMPLE_DATA[perfFilter.groupBy] ?? [], [perfFilter.groupBy]);
 
-  const availableDepartments = perfFilter.division ? DEPARTMENTS[perfFilter.division] || [] : [];
+  const org = useOrgTree();
+  const availableDepartments = perfFilter.division ? org.departments[perfFilter.division] || [] : [];
 
   return (
     <Layout title="Dashboard" subtitle="Performance management overview">
@@ -229,7 +230,7 @@ export default function Dashboard() {
                   className="text-xs pl-2 pr-6 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none cursor-pointer"
                 >
                   <option value="">All Divisions</option>
-                  {DIVISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {org.divisions.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
                 <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
               </div>

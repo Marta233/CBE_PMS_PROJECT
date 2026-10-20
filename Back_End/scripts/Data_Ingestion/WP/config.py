@@ -22,29 +22,9 @@ OUTPUT_PATH = PROJECT_ROOT / "Data" / "processed"
 QUARTER_LABELS = ("1st Q", "2nd Q", "3rd Q", "4th Q")
 QUARTER_NUMBERS = {"1st Q": "Q1", "2nd Q": "Q2", "3rd Q": "Q3", "4th Q": "Q4"}
 
-# ----------------------------
-# DEPARTMENT ALIASES
-# ----------------------------
-# Title in the docx (lower-case, without "Work plan")  ->  department name
-# stored in metadata. Use this to file a plan under a parent department
-# whose name differs from the title on the document.
-DEPARTMENT_ALIASES = {
-    "mobile banking business": "Mobile & Internet Banking",
-    "mobile banking": "Mobile & Internet Banking",
-}
-
-# ----------------------------
-# UNIT -> DEPARTMENT
-# ----------------------------
-# Decided PER ROW while the Work Plan is ingested: a row whose Unit is listed here is
-# filed under that department, whatever the docx title / file name says (or even if
-# they say nothing). Keys are lower-case; '&' and 'and' are treated alike.
-UNIT_DEPARTMENT_MAP = {
-    "mobile banking": "Mobile & Internet Banking",
-    "mobile banking business": "Mobile & Internet Banking",
-    "internet banking": "Mobile & Internet Banking",
-    "internet banking business": "Mobile & Internet Banking",
-}
+# Department and unit names are resolved through org_registry.json.
+# A title or unit cell that matches a registry name or alias is filed
+# under that department. Add a spelling there, not in this file.
 
 # ensure output folder exists
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)

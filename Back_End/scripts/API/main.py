@@ -63,6 +63,7 @@ _ROLE_DESCRIPTION = {
         "- `/api/jobs/{job_id}` — Poll a generation job\n"
         "- `/api/reload-index` — Drop the cached retrieval index\n"
         "- `/api/status` — Check document counts and index state\n"
+        "- `/api/org` — Division, department, and unit tree\n"
         "- `/api/health` — Liveness probe\n"
     ),
     "api": (
@@ -70,10 +71,12 @@ _ROLE_DESCRIPTION = {
         "- `/api/jobs/{job_id}` — Poll a generation job\n"
         "- `/api/reload-index` — Drop the cached retrieval index\n"
         "- `/api/status` — Check document counts and index state\n"
+        "- `/api/org` — Division, department, and unit tree\n"
         "- `/api/health` — Liveness probe\n"
     ),
     "ingest": (
         "- `/api/ingest` — Upload BSC, JD, LOS, or work-plan files\n"
+        "- `/api/org` — Division, department, and unit tree\n"
         "- `/api/health` — Liveness probe\n"
     ),
 }
@@ -95,6 +98,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from .routers import org
+
+app.include_router(org.router, prefix="/api")
 
 if _APP_ROLE in {"all", "ingest"}:
     from .routers import ingest

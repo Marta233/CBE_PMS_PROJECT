@@ -1,0 +1,89 @@
+{
+  "division": "Digital Banking",
+  "document_split_bands": [
+    "senior_officer",
+    "digital_banking_officer",
+    "associate_officer_ii",
+    "associate_officer_i",
+    "banking_operation_officer",
+    "junior_officer_ii",
+    "junior_officer_i"
+  ],
+  "no_proposal_bands": [
+    "banking_operation_officer",
+    "junior_officer_ii",
+    "junior_officer_i"
+  ],
+  "bands": {
+    "director": {
+      "critical_weight": 80,
+      "supervisor_target": "VP's",
+      "primary_channel_weight": 15,
+      "max_goal_rows": 9,
+      "goal_focus": "strategic oversight, revenue generation, expense management, department compliance, stakeholder management, initiative delivery"
+    },
+    "unit_manager": {
+      "critical_weight": 70,
+      "supervisor_target": "Director's",
+      "primary_channel_weight": 15,
+      "max_goal_rows": 9,
+      "goal_focus": "team performance oversight, non-interest income strategy, regulatory compliance, customer satisfaction, transaction volume, new functionalities, active user growth (primary channel metric — highest non-critical weight), 3rd party productivity, document turnaround"
+    },
+    "team_leader": {
+      "critical_weight": 50,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 15,
+      "max_goal_rows": 7,
+      "goal_focus": "operational execution oversight, zero-backlog production or delivery targets, materials and stock availability, report submission, stakeholder communication"
+    },
+    "senior_officer": {
+      "critical_weight": 50,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 20,
+      "max_goal_rows": 10,
+      "goal_focus": "proposal initiation and analysis, document preparation and review (split into Quality + Time sub-goals), non-interest income proposals, new features and functionalities, fraud/product catalogue, active channel user acquisition (primary metric — 20% weight), strategic assessment documents"
+    },
+    "digital_banking_officer": {
+      "critical_weight": 50,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 20,
+      "max_goal_rows": 10,
+      "goal_focus": "BRD and proposal preparation (Quality + Time splits), 3rd party operational monitoring, active channel user growth (20% weight), inactive user reduction, new functionalities, income or expense assessments, branding or customer feedback"
+    },
+    "associate_officer_ii": {
+      "critical_weight": 50,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 20,
+      "max_goal_rows": 9,
+      "goal_focus": "UAT preparation and execution, new product or service idea initiation (Quality + Time splits), performance and fraud reporting, active channel user growth, customer preference analysis"
+    },
+    "associate_officer_i": {
+      "critical_weight": 50,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 20,
+      "max_goal_rows": 11,
+      "goal_focus": "UAT execution, branch or user issue resolution, business idea initiation, performance and fraud reporting (Quality + Time splits), industry trend identification, active channel user growth"
+    },
+    "banking_operation_officer": {
+      "critical_weight": 40,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 10,
+      "max_goal_rows": 10,
+      "goal_focus": "income or fee assessments (Quality + Time splits), use case and loophole identification, proposal drafting for new product ideas, UAT completion rate, performance report compilation, active channel user support — DO NOT include strategic oversight or income strategy"
+    },
+    "junior_officer_ii": {
+      "critical_weight": 40,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 10,
+      "max_goal_rows": 10,
+      "goal_focus": "sales performance analysis (Quality + Time splits), compiled status reports, marketing activity execution, 3rd party and merchant visits, active channel user growth — DO NOT include proposal initiation or BRD preparation"
+    },
+    "junior_officer_i": {
+      "critical_weight": 40,
+      "supervisor_target": "Manager's",
+      "primary_channel_weight": 10,
+      "max_goal_rows": 10,
+      "goal_focus": "transaction performance analysis (Quality + Time splits), periodic 3rd party and merchant visits, transaction report compilation, channel penetration support, active channel user growth — DO NOT include proposal initiation or BRD preparation"
+    }
+  }
+}
