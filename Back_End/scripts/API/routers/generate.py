@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Response
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
-from cache.retrieval_cache import redis_available
+from cache.redis_client import redis_available
 from config import JOB_RESULT_TTL, LLM_BACKEND, USE_ASYNC_QUEUE
 from jobs.job_store import (
     JobStatus,

@@ -13,19 +13,11 @@ KNOWLEDGE_BASE_FILE = DOCS_DIR / "knowledge_base.json"
 RETRIEVED_CONTEXT_PATH = DOCS_DIR / "retrieved_context.json"
 GENERATED_OBJECTIVES_PATH = DOCS_DIR / "generated_objectives.json"
 
-# Legacy batch CLI outputs (Data_Ingestion *_main.py only)
-LOS_DATA_PATH = DATA_DIR / "processed" / "los_documents.JSON"
-JD_DATA_PATH = DATA_DIR / "processed" / "jd_documents.JSON"
-BSC_Data_PATH = DATA_DIR / "processed" / "bsc_documents.JSON"
-
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL)
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 
 USE_ASYNC_QUEUE = os.getenv("PMS_USE_ASYNC_QUEUE", "true").lower() in ("1", "true", "yes")
-
-RETRIEVAL_CACHE_TTL = int(os.getenv("PMS_RETRIEVAL_CACHE_TTL", str(24 * 3600)))
-RETRIEVAL_CACHE_MAX_SIZE = int(os.getenv("PMS_RETRIEVAL_CACHE_MAX_SIZE", "256"))
 
 STEP1_CACHE_TTL = int(os.getenv("PMS_STEP1_CACHE_TTL", str(24 * 3600)))
 STEP1_CACHE_MAX_SIZE = int(os.getenv("PMS_STEP1_CACHE_MAX_SIZE", "128"))

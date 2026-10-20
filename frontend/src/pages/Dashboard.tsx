@@ -6,11 +6,10 @@ import {
 } from 'recharts';
 import {
   Target, TrendingUp, Users, Star,
-  CircleCheck as CheckCircle, Clock,
-  CircleAlert as AlertCircle, ChevronDown,
+  CircleCheck as CheckCircle, Clock, ChevronDown,
 } from 'lucide-react';
 import Layout from '../components/Layout';
-import { DIVISIONS, DEPARTMENTS, UNITS, JOB_TITLES } from '../types';
+import { DIVISIONS, DEPARTMENTS } from '../types';
 
 const COLORS = ['#2596be', '#10b981', '#f59e0b', '#ef4444', '#1e7ea3', '#06b6d4'];
 
@@ -131,8 +130,6 @@ export default function Dashboard() {
     groupBy:    'department' as 'division' | 'department' | 'unit' | 'job_title',
     division:   '',
     department: '',
-    unit:       '',
-    job_title:  '',
     quarter:    '',
   });
 
@@ -140,10 +137,6 @@ export default function Dashboard() {
   const perfChartData = useMemo(() => SAMPLE_DATA[perfFilter.groupBy] ?? [], [perfFilter.groupBy]);
 
   const availableDepartments = perfFilter.division ? DEPARTMENTS[perfFilter.division] || [] : [];
-  const availableUnits       = perfFilter.department ? UNITS[perfFilter.department] || [] : [];
-  const availableJobTitles   = perfFilter.unit
-    ? (UNITS[perfFilter.unit] ? JOB_TITLES : JOB_TITLES)
-    : JOB_TITLES;
 
   return (
     <Layout title="Dashboard" subtitle="Performance management overview">
@@ -232,7 +225,7 @@ export default function Dashboard() {
               <div className="relative">
                 <select
                   value={perfFilter.division}
-                  onChange={(e) => setPerfFilter((f) => ({ ...f, division: e.target.value, department: '', unit: '', job_title: '' }))}
+                  onChange={(e) => setPerfFilter((f) => ({ ...f, division: e.target.value, department: '' }))}
                   className="text-xs pl-2 pr-6 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none cursor-pointer"
                 >
                   <option value="">All Divisions</option>
@@ -245,7 +238,7 @@ export default function Dashboard() {
                 <div className="relative">
                   <select
                     value={perfFilter.department}
-                    onChange={(e) => setPerfFilter((f) => ({ ...f, department: e.target.value, unit: '', job_title: '' }))}
+                    onChange={(e) => setPerfFilter((f) => ({ ...f, department: e.target.value }))}
                     className="text-xs pl-2 pr-6 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none cursor-pointer"
                   >
                     <option value="">All Depts</option>

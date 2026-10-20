@@ -32,13 +32,3 @@ class LRUMemoryStore:
             self._store.move_to_end(key)
             while len(self._store) > self._max_size:
                 self._store.popitem(last=False)
-
-    def clear(self) -> int:
-        with self._lock:
-            count = len(self._store)
-            self._store.clear()
-            return count
-
-    def size(self) -> int:
-        with self._lock:
-            return len(self._store)

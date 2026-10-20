@@ -88,50 +88,6 @@ def check_llm_available(model: str | None = None) -> None:
         _run_with_timeout(lambda: _check_ollama(model), health_timeout)
 
 
-def probe_llm_health(model: str | None = None) -> dict[str, Any]:
-    """Lightweight health probe for /api/health — uses short timeouts."""
-    from config import (
-        OLLAMA_HEALTH_TIMEOUT_SECONDS,
-        OLLAMA_MAX_CONCURRENT,
-        OLLAMA_TIMEOUT_SECONDS,
-        VLLM_TIMEOUT_SECONDS,
-    )
-
-    backend, default_model = _backend_config()
-    model = model or default_model
-    health_timeout = OLLAMA_HEALTH_TIMEOUT_SECONDS if backend == "ollama" else 5.0
-
-    out: dict[str, Any] = {
-        "backend": backend,
-        "model": model,
-        "reachable": False,
-        "model_loaded": False,
-        "available": False,
-        "message": "unknown",
-        "request_timeout_seconds": OLLAMA_TIMEOUT_SECONDS if backend == "ollama" else VLLM_TIMEOUT_SECONDS,
-        "health_timeout_seconds": health_timeout,
-        "max_concurrent_requests": OLLAMA_MAX_CONCURRENT if backend == "ollama" else None,
-    }
-
-    try:
-        if backend == "vllm":
-            _run_with_timeout(lambda: _check_vllm(model), health_timeout)
-        else:
-            _run_with_timeout(lambda: _check_ollama(model), health_timeout)
-        out.update(reachable=True, model_loaded=True, available=True, message="ok")
-    except LLMTimeoutError as exc:
-        out["message"] = str(exc)
-    except LLMUnavailableError as exc:
-        msg = str(exc)
-        out["message"] = msg
-        if backend == "ollama" and "not loaded" in msg.lower():
-            out["reachable"] = True
-    except Exception as exc:
-        out["message"] = f"Health probe failed: {exc}"
-
-    return out
-
-
 def _check_ollama(model: str) -> None:
     import ollama
 

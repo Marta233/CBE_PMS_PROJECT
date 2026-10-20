@@ -8,7 +8,7 @@ import logging
 from typing import Any, Optional
 
 from cache.lru_store import LRUMemoryStore
-from cache.redis_client import get_redis, redis_available
+from cache.redis_client import get_redis
 from config import STEP1_CACHE_MAX_SIZE, STEP1_CACHE_TTL
 
 logger = logging.getLogger(__name__)
@@ -83,26 +83,3 @@ def set_cached_step1_drafts(key: str, drafts: list[dict[str, Any]], ttl: int | N
             logger.warning(f"Step 1 cache set failed: {exc}")
 
     _MEMORY.set(key, payload, ttl)
-
-
-def invalidate_all() -> int:
-    """Clear Step 1 cache (e.g. after prompt template changes)."""
-    r = get_redis()
-    if r is not None:
-        try:
-            keys = list(r.scan_iter("pms:step1:*"))
-            if keys:
-                r.delete(*keys)
-            return len(keys)
-        except Exception:
-            pass
-    return _MEMORY.clear()
-
-
-def cache_stats() -> dict[str, int | bool]:
-    return {
-        "redis_backed": redis_available(),
-        "memory_entries": _MEMORY.size(),
-        "memory_max_size": STEP1_CACHE_MAX_SIZE,
-        "ttl_seconds": STEP1_CACHE_TTL,
-    }
