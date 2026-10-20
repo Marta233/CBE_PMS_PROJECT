@@ -387,10 +387,10 @@ export default function DataIngestion() {
     setRebuilding(true);
     setRebuildMsg(null);
     try {
-      const res = await fetch(`${API_URL}/api/rebuild-index`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/reload-index`, { method: 'POST' });
       if (!res.ok) throw new Error(`${res.status}`);
       const data = await res.json();
-      setRebuildMsg(data.message ?? 'Index rebuilt successfully.');
+      setRebuildMsg(data.detail ?? data.message ?? 'Retrieval index reloaded.');
     } catch (err) {
       setRebuildMsg(`Failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -415,7 +415,7 @@ export default function DataIngestion() {
           <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
             Each file is parsed, chunked, and embedded into the FAISS vector store used by the LLM objective generator.
             Upload <strong>BSC</strong> for KPI targets, <strong>JD</strong> for job responsibilities, and <strong>LOS</strong> for cascaded strategic objectives.
-            After uploading, click <strong>Rebuild Index</strong> to make new documents available to the generation pipeline.
+            After uploading, click <strong>Reload Index</strong> to make new documents available to the generation pipeline.
           </p>
         </div>
       </div>
@@ -474,7 +474,7 @@ export default function DataIngestion() {
           className="inline-flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
         >
           <RefreshCw size={15} className={rebuilding ? 'animate-spin' : ''} />
-          {rebuilding ? 'Rebuilding…' : 'Rebuild Index'}
+          {rebuilding ? 'Reloading…' : 'Reload Index'}
         </button>
 
         {/* Clear */}
@@ -512,7 +512,7 @@ export default function DataIngestion() {
           <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100 mb-2">No Files Selected</h3>
           <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
             Use the drop zones above to add your <strong>BSC</strong>, <strong>JD</strong>, and <strong>LOS</strong> files.
-            You can drag and drop or click to browse. Once uploaded, click <strong>Rebuild Index</strong> to make them available to the generation pipeline.
+            You can drag and drop or click to browse. Once uploaded, click <strong>Reload Index</strong> to make them available to the generation pipeline.
           </p>
         </div>
       )}
