@@ -33,6 +33,19 @@ DEPARTMENT_ALIASES = {
     "mobile banking": "Mobile & Internet Banking",
 }
 
+# ----------------------------
+# UNIT -> DEPARTMENT
+# ----------------------------
+# Decided PER ROW while the Work Plan is ingested: a row whose Unit is listed here is
+# filed under that department, whatever the docx title / file name says (or even if
+# they say nothing). Keys are lower-case; '&' and 'and' are treated alike.
+UNIT_DEPARTMENT_MAP = {
+    "mobile banking": "Mobile & Internet Banking",
+    "mobile banking business": "Mobile & Internet Banking",
+    "internet banking": "Mobile & Internet Banking",
+    "internet banking business": "Mobile & Internet Banking",
+}
+
 # ensure output folder exists
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)

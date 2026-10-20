@@ -35,9 +35,9 @@ from langchain_core.documents import Document  # noqa: E402
 
 DEFAULT_QUERY = """
 Division: Digital Banking
-Job Title: Banking Operation Officer
-Department:Merchant and Agent Management
-Unit:Merchant Management
+Job Title:Senior Digital Banking Officer
+Department:Mobile & Internet Banking
+Unit:Mobile Banking
 Job Grade: 9
 """
 

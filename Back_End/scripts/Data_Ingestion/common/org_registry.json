@@ -1,0 +1,186 @@
+{
+  "_readme": "Single source of truth for the CBE organisation tree. Edit this file, not code, to onboard a division/department/unit or to add a spelling. 'confirmed': false means the entry was inferred from existing documents and needs review by the business owner.",
+  "divisions": [
+    {
+      "name": "Digital Banking",
+      "aliases": [
+        "Digital Banking Division",
+        "Digital"
+      ],
+      "confirmed": true,
+      "departments": [
+        {
+          "name": "Mobile & Internet Banking",
+          "aliases": [
+            "Mobile &Internet Banking",
+            "Mobile& Internet Banking",
+            "Mobile and Internet Banking",
+            "Online Banking"
+          ],
+          "confirmed": true,
+          "units": [
+            {
+              "name": "Mobile Banking",
+              "aliases": [
+                "Mobile Banking Business"
+              ],
+              "confirmed": true
+            },
+            {
+              "name": "Internet Banking",
+              "aliases": [
+                "Internet Banking Business"
+              ],
+              "confirmed": true
+            }
+          ]
+        },
+        {
+          "name": "Merchant and Agent Management",
+          "aliases": [
+            "Merchant and Agent Banking",
+            "Merchant & Agent Management"
+          ],
+          "confirmed": true,
+          "units": [
+            {
+              "name": "Agent Management",
+              "aliases": [
+                "Agent"
+              ],
+              "confirmed": true
+            },
+            {
+              "name": "Merchant Management",
+              "aliases": [
+                "Merchant"
+              ],
+              "confirmed": true
+            },
+            {
+              "name": "Digital Partners Relationship",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Mesob",
+              "aliases": [],
+              "confirmed": false
+            }
+          ],
+          "paired_units": [
+            "Agent Management",
+            "Merchant Management"
+          ]
+        },
+        {
+          "name": "Card Banking",
+          "aliases": [
+            "Card",
+            "Director Card Banking"
+          ],
+          "confirmed": false,
+          "units": [
+            {
+              "name": "ATM Operations Support",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Card Banking Business",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Card Issuance Solution Management",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Card Production and Distribution",
+              "aliases": [],
+              "confirmed": true
+            }
+          ]
+        },
+        {
+          "name": "Digital Banking Reconciliation and Dispute Management",
+          "aliases": [
+            "Digital Banking Reconciliation"
+          ],
+          "confirmed": true,
+          "units": [
+            {
+              "name": "Domestic Card Transaction Reconciliation",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "International Card Transaction Reconciliation",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Merchant and Agent Reconciliation",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Mobile Money Reconciliation",
+              "aliases": [],
+              "confirmed": true
+            },
+            {
+              "name": "Mobile and Internet Banking Reconciliation",
+              "aliases": [],
+              "confirmed": true
+            }
+          ]
+        },
+        {
+          "name": "Mobile Money",
+          "aliases": [],
+          "confirmed": false,
+          "units": [
+            {
+              "name": "Mobile Money Business",
+              "aliases": [],
+              "confirmed": true
+            }
+          ]
+        },
+        {
+          "name": "Internal Control",
+          "aliases": [],
+          "confirmed": false,
+          "units": [
+            {
+              "name": "Internal Control",
+              "aliases": [],
+              "confirmed": false
+            }
+          ]
+        },
+        {
+          "name": "Digital Service Development",
+          "aliases": [
+            "Digital service devlopment",
+            "Digital Service Devlopment"
+          ],
+          "confirmed": false,
+          "units": []
+        }
+      ]
+    },
+    {
+      "name": "RBB",
+      "aliases": [
+        "Retail & Branch Banking",
+        "Retail and Branch Banking",
+        "Retail Banking Business"
+      ],
+      "confirmed": false,
+      "departments": []
+    }
+  ]
+}

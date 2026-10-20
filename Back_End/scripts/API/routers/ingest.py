@@ -211,7 +211,28 @@ async def ingest_file(
         return (source, meta.get("division"))
 
     new_keys = {_dedup_key(doc) for doc in new_docs if isinstance(doc, dict)}
-    filtered = [doc for doc in existing if _dedup_key(doc) not in new_keys]
+
+    # A Work Plan stored with a BLANK department (by an older loader) can never match a
+    # query, and its key differs from the corrected plan's — so a re-upload would leave
+    # it behind as a duplicate. Re-uploading the same fiscal year + unit replaces it too.
+    new_wp_slots = {
+        (doc["metadata"].get("fiscal_year"), doc["metadata"].get("unit"))
+        for doc in new_docs
+        if isinstance(doc, dict) and doc.get("metadata", {}).get("source") == "WorkPlan"
+    }
+
+    def _is_stale_blank_wp(doc: dict) -> bool:
+        meta = doc.get("metadata", {})
+        return (
+            meta.get("source") == "WorkPlan"
+            and not str(meta.get("department") or "").strip()
+            and (meta.get("fiscal_year"), meta.get("unit")) in new_wp_slots
+        )
+
+    filtered = [
+        doc for doc in existing
+        if _dedup_key(doc) not in new_keys and not _is_stale_blank_wp(doc)
+    ]
     removed = len(existing) - len(filtered)
     if removed:
         logger.info(f"♻️  Removed {removed} old chunks for keys: {new_keys}")

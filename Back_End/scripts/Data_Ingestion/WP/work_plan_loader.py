@@ -16,6 +16,7 @@ what actually comes from the Work Plan docx itself: Department, Fiscal
 Year, Unit, Division Objective, and the full-year monthly targets.
 """
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -42,6 +43,11 @@ def _norm_unit(raw_unit: str) -> str:
     return raw_unit.strip() or "Unspecified"
 
 
+def _loose_key(text) -> str:
+    """Comparison key that ignores case and how '&' is spelled/spaced."""
+    return re.sub(r"\s+", " ", str(text or "").replace("&", " and ")).strip().lower()
+
+
 def _clean_target_phrase(text: str) -> str:
     """
     Strip a trailing mechanism clause ("...by strengthening relationship")
@@ -65,6 +71,10 @@ class WorkPlanLoader:
         """
         self.file_path = Path(file_path)
         self.config = config or {}
+        # UNIT -> DEPARTMENT, decided per row at ingestion (see config.UNIT_DEPARTMENT_MAP)
+        self.unit_departments = {
+            _loose_key(k): v for k, v in (self.config.get("UNIT_DEPARTMENT_MAP") or {}).items()
+        }
         self.doc = None
         self.department = None
         self.fiscal_year = None
@@ -118,8 +128,12 @@ class WorkPlanLoader:
     def _parse_quarter_table(self, table) -> List[dict]:
         """
         Row 0: ["Division Objectives", quarter_label, quarter_label, quarter_label, ""]
-        Row 1: ["Division Objectives", month1, month2, month3, "Unit"]
-        Row 2+: [division_objective, target1, target2, target3, unit]
+        Row 1: ["Division Objectives", month1, month2, month3, "Unit"]   <- Unit column is OPTIONAL
+        Row 2+: [division_objective, target1, target2, target3, unit?]
+
+        Some departments (e.g. Mobile Banking) have NO Unit column (4 columns).
+        Their rows get unit = the department name, so every document still
+        carries a unit value to key on.
         """
         quarter_labels = self.config.get("QUARTER_LABELS", ("1st Q", "2nd Q", "3rd Q", "4th Q"))
         quarter_numbers = self.config.get(
@@ -131,20 +145,33 @@ class WorkPlanLoader:
         quarter_label = next((h for h in header_row0 if h in quarter_labels), "")
         quarter = quarter_numbers.get(quarter_label, quarter_label or "Unknown")
         months = header_row1[1:4]
+        has_unit_col = len(header_row1) >= 5 and header_row1[4].strip().lower() == "unit"
 
         entries = []
         for row in table.rows[2:]:
             cells = [c.text.strip() for c in row.cells]
-            if len(cells) < 5 or not cells[0]:
+            if len(cells) < 4 or not cells[0]:
                 continue
-            division_objective, m1, m2, m3, unit_raw = cells[0], cells[1], cells[2], cells[3], cells[4]
+            division_objective, m1, m2, m3 = cells[0], cells[1], cells[2], cells[3]
+            unit_raw = cells[4] if has_unit_col and len(cells) > 4 else ""
+            unit = _norm_unit(unit_raw) if unit_raw.strip() else (self.department or "Unspecified")
             entries.append({
                 "division_objective": division_objective,
                 "quarter": quarter,
                 "months": dict(zip(months, [m1, m2, m3])),
-                "unit": _norm_unit(unit_raw),
+                "unit": unit,
+                "department": self._department_for(unit),
             })
         return entries
+
+    def _department_for(self, unit: str) -> str:
+        """
+        The department a row is filed under. The unit wins: a unit listed in
+        UNIT_DEPARTMENT_MAP (e.g. 'Mobile Banking' -> 'Mobile & Internet Banking')
+        belongs to that department whatever the docx title / file name says, or even
+        if they say nothing. Otherwise the title / file-name department is used.
+        """
+        return self.unit_departments.get(_loose_key(unit)) or self.department or ""
 
     def clean(self) -> "WorkPlanLoader":
         """Parse the loaded docx into department metadata + flat unit-tagged entries."""
@@ -155,8 +182,21 @@ class WorkPlanLoader:
         logger.info("\n📋 Cleaning Work Plan data...")
 
         title_paragraphs = [p.text.strip() for p in self.doc.paragraphs if p.text.strip()]
-        dept_line = next((t for t in title_paragraphs if "management" in t.lower()), "")
-        self.department = re.sub(r"\s*Work\s*plan\s*$", "", dept_line, flags=re.IGNORECASE).strip()
+        dept_line = next(
+            (t for t in title_paragraphs
+             if re.search(r"work\s*plan", t, re.IGNORECASE)
+             and not re.match(r"work\s*plan\s+for\b", t, re.IGNORECASE)),
+            "",
+        )
+        self.department = re.sub(r"\s*Work\s*plan.*$", "", dept_line, flags=re.IGNORECASE).strip()
+        if not self.department:  # fallback: filename "MB_Work_Plan_-2026-27FY.docx" -> "MB"
+            self.department = re.split(
+                r"_?work[_\s-]*plan", self.file_path.stem, flags=re.IGNORECASE
+            )[0].strip("_ -")
+        # A blank department here is no longer fatal by itself: the rows' units may still
+        # name it (UNIT_DEPARTMENT_MAP). It is only an error if some row ends up without one.
+        aliases = {k.lower(): v for k, v in self.config.get("DEPARTMENT_ALIASES", {}).items()}
+        self.department = aliases.get(self.department.lower(), self.department)
         fy_line = next((t for t in title_paragraphs if re.search(r"\d{4}/\d{2,4}", t)), "")
         fy_match = re.search(r"\d{4}/\d{2,4}", fy_line)
         self.fiscal_year = fy_match.group(0) if fy_match else ""
@@ -170,6 +210,19 @@ class WorkPlanLoader:
         for t in tables[1:]:
             self.entries.extend(self._parse_quarter_table(t))
 
+        # Every document must carry a department — a blank one can never match a query.
+        blank_units = sorted({e["unit"] for e in self.entries if not e["department"]})
+        if blank_units or (not self.department and not self.entries):
+            raise ValueError(
+                f"Could not determine the department of {self.file_path.name!r}: its title and file name "
+                f"don't name one"
+                + (f", and the unit(s) {blank_units} are not in UNIT_DEPARTMENT_MAP" if blank_units else "")
+                + ". Name the department in the title, or add the unit to UNIT_DEPARTMENT_MAP "
+                  "(Data_Ingestion/WP/config.py)."
+            )
+        if not self.department:  # label for the log only; each row keeps its own department
+            self.department = Counter(e["department"] for e in self.entries).most_common(1)[0][0]
+
         logger.info(f"  ✅ Cleaned {len(self.entries)} Work Plan entries "
                     f"for {self.department} ({self.fiscal_year})")
         return self
@@ -179,15 +232,15 @@ class WorkPlanLoader:
     # FULL FISCAL YEAR (Q1-Q4 rolled up together)
     # =========================================================
 
-    def _group_into_yearly_objectives(self) -> Dict[Tuple[str, str], Dict[str, dict]]:
+    def _group_into_yearly_objectives(self) -> Dict[Tuple[str, str, str], Dict[str, dict]]:
         """
-        Group flat quarterly entries by (division_objective, unit), merging
+        Group flat quarterly entries by (division_objective, unit, department), merging
         all 4 quarters' monthly targets under each key — this is what turns
         4 separate quarter-scoped rows into 1 yearly objective.
         """
-        grouped: Dict[Tuple[str, str], Dict[str, dict]] = {}
+        grouped: Dict[Tuple[str, str, str], Dict[str, dict]] = {}
         for entry in self.entries:
-            key = (entry["division_objective"], entry["unit"])
+            key = (entry["division_objective"], entry["unit"], entry["department"])
             grouped.setdefault(key, {})[entry["quarter"]] = entry["months"]
         return grouped
 
@@ -212,7 +265,7 @@ class WorkPlanLoader:
         grouped = self._group_into_yearly_objectives()
 
         documents = []
-        for (division_objective, unit), quarters in grouped.items():
+        for (division_objective, unit, department), quarters in grouped.items():
             seen: set[str] = set()
             activities: List[str] = []
             for q in _QUARTER_ORDER:
@@ -220,27 +273,23 @@ class WorkPlanLoader:
                 if not months:
                     continue
                 for month_name in months:  # dict preserves insertion order (chronological)
-                    cleaned = _clean_target_phrase(months[month_name])
+                    cleaned = _clean_target_phrase(re.sub(r"\s*\n\s*", " ", months[month_name]))
                     if cleaned and cleaned not in seen:
                         seen.add(cleaned)
                         activities.append(cleaned)
 
             activities_text = "\n".join(f"  - {a}" for a in activities)
 
-            # Text shown to the LLM is JUST the objective + activities —
-            # Department/Fiscal Year/Unit are already in the employee's own
-            # query profile, so repeating them here per chunk is redundant
-            # token cost with no new information. Those fields stay in
-            # `metadata` below, which is what _filter_work_plan() actually
-            # uses for department/unit filtering — metadata is for
-            # retrieval only, never shown to the model directly.
+            # The text is only what the model needs: the objective + its activities.
+            # Department / fiscal year / unit are already in the employee's query, and
+            # stay in `metadata`, which is what retrieval filters on.
             text = (
                 f"Division Objective (Full Year): {division_objective}\n"
                 f"Activities for the Year:\n{activities_text}"
             )
             metadata = {
                 "source": "WorkPlan",
-                "department": self.department,
+                "department": department,
                 "fiscal_year": self.fiscal_year,
                 "unit": unit,
                 "division_objective": division_objective,

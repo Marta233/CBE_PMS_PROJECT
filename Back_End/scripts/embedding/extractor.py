@@ -47,6 +47,12 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+def _loose_key(text) -> str:
+    """Comparison key that ignores case and how '&' is spaced or spelled:
+    'Mobile &Internet Banking' == 'Mobile & Internet Banking' == 'mobile and internet banking'."""
+    return re.sub(r"\s+", " ", str(text or "").replace("&", " and ")).strip().lower()
+
+
 def _stem_tokens(text: str) -> set:
     if not text:
         return set()
@@ -86,7 +92,7 @@ WORK_PLAN_DEPARTMENT_MAP: dict[str, list[str]] = {
         "online banking", "mobile &internet banking",
         "mobile & internet banking", "mobile and internet banking",
         "internet banking", "mobile banking", "mobile &internet",
-        "mobile banking business", "internet banking business",
+        "mobile banking business", "internet banking business", "Mobile & Internet Banking",
     ],
     "Merchant and Agent Management": [
         "merchant and agent management", "merchant and agent banking",
@@ -504,6 +510,9 @@ class QueryExtractor:
                 result.detected_work_plan_department, result.detected_unit
             )
             logger.info(f"  Work Plan docs: {len(result.work_plan_docs)}")
+        else:
+            logger.warning(f"  Work Plan: department {result.detected_department_name!r} is not in "
+                           f"WORK_PLAN_DEPARTMENT_MAP — no Work Plan retrieved.")
 
         # JD — fallback chain
         result.jd_doc = self._match_jd_with_fallback(
@@ -683,14 +692,14 @@ class QueryExtractor:
         """
         if not department:
             return []
-        dept_norm = _normalize(department)
+        dept_norm = _loose_key(department)      # '&Internet' == '& Internet' == 'and Internet'
         allowed = self._allowed_work_plan_units(unit) if unit else None
         unit_norm = _normalize(unit) if unit else ""
         reconciliation_only = "reconciliation" in unit_norm
 
         matched = []
         for doc in self.work_plan_docs:
-            meta_dept = _normalize(_get_meta(doc).get("department", ""))
+            meta_dept = _loose_key(_get_meta(doc).get("department", ""))
             if meta_dept != dept_norm and dept_norm not in meta_dept:
                 continue
             doc_unit = str(_get_meta(doc).get("unit", "") or "")
@@ -700,10 +709,38 @@ class QueryExtractor:
                 if "reconciliation" in stored and (stored in asked or asked in stored):
                     matched.append(doc)
                 continue
-            if allowed is not None and doc_unit not in allowed:
+            # A plan whose docx has no Unit column is filed under the department
+            # name (see work_plan_loader.py). It is department-wide, so it applies
+            # to every unit of that department, like "Both".
+            department_wide = _loose_key(doc_unit) == meta_dept
+            if allowed is not None and doc_unit not in allowed and not department_wide:
                 continue
             matched.append(doc)
+        if not matched:
+            self._explain_empty_work_plan(department, unit)
         return matched
+
+    def _explain_empty_work_plan(self, department: Optional[str], unit: Optional[str]) -> None:
+        """Say WHY no Work Plan document matched (this used to be a silent 0)."""
+        if not self.work_plan_docs:
+            logger.warning("  Work Plan: the knowledge base holds NO Work Plan documents "
+                           "(upload them, or run merge_work_plan_into_kb.py).")
+            return
+        stored: dict[tuple, int] = {}
+        for d in self.work_plan_docs:
+            m = _get_meta(d)
+            key = (str(m.get("department", "")), str(m.get("unit", "")))
+            stored[key] = stored.get(key, 0) + 1
+        dept_norm = _loose_key(department)
+        same_dept = {k: n for k, n in stored.items()
+                     if _loose_key(k[0]) == dept_norm or dept_norm in _loose_key(k[0])}
+        if not same_dept:
+            logger.warning(f"  Work Plan: nothing is stored for department {department!r}. "
+                           f"Departments in the knowledge base: {sorted({k[0] for k in stored})}")
+        else:
+            units = sorted(f"{u!r} x{n}" for (_, u), n in same_dept.items())
+            logger.warning(f"  Work Plan: department {department!r} is stored, but no unit fits "
+                           f"the query unit {unit!r}. Stored units: {', '.join(units)}")
 
     # ── JD fallback chain  (IMPROVEMENT #5) ──────────────────────────────────
     def _match_jd_with_fallback(
@@ -724,9 +761,23 @@ class QueryExtractor:
         ]
         for strat in strategies:
             label = strat.pop("label")
-            result = self._match_jd_flexible(**strat)
+            result = self._match_jd_flexible(job_grade=job_grade, **strat)
             if result:
-                logger.info(f"  ✓ JD matched via [{label}]")
+                m = _get_meta(result)
+                logger.info(
+                    f"  ✓ JD matched via [{label}] → {m.get('job_title')!r} | "
+                    f"unit {m.get('unit')!r} | grade {m.get('job_grade')}"
+                )
+                if strat.get("job_title") is None and job_title:
+                    logger.warning(
+                        f"  ⚠ JD matched WITHOUT the job title — this may be a different role than {job_title!r}"
+                    )
+                asked, got = self._grade_number(job_grade), self._grade_number(m.get("job_grade"))
+                if asked is not None and got is not None and asked != got:
+                    logger.warning(
+                        f"  ⚠ JD grade {got} differs from the requested grade {asked} "
+                        f"(no JD with that grade matched)"
+                    )
                 return result
             logger.info(f"  ✗ JD [{label}] no match")
         logger.warning("  ✗ JD: no match at any fallback level")
@@ -751,18 +802,66 @@ class QueryExtractor:
         if not self.jd_docs:
             return None
         q_div   = _normalize(division)   if division   else None
-        q_dept  = _normalize(department) if department else None
-        q_unit  = _normalize(unit)       if unit       else None
-        q_title = _normalize(job_title)  if job_title  else None
+        q_dept  = _loose_key(department) if department else None
+        q_unit  = unit                   if unit       else None
+        q_title = _loose_key(job_title)  if job_title  else None
+        q_grade = self._grade_number(job_grade)
 
+        # Several JDs can pass the filters (same unit + title at different
+        # grades, or 'Mobile Banking' vs 'Mobile Banking Business'). Pick the
+        # best one — exact unit, then exact department, then same grade — and
+        # keep the FIRST on a tie, which is what the old first-match loop did.
+        best, best_rank = None, None
         for doc in self.jd_docs:
             meta = _get_meta(doc)
-            if q_div   and _normalize(meta.get("division", ""))  != q_div:   continue
-            if q_unit  and _normalize(meta.get("unit", ""))      != q_unit:  continue
-            if q_title and _normalize(meta.get("job_title", "")) != q_title: continue
-            if q_dept  and not self._department_match(q_dept, _normalize(meta.get("department", ""))): continue
-            return doc
-        return None
+            if q_div and _normalize(meta.get("division", "")) != q_div:
+                continue
+            unit_score = 2
+            if q_unit:
+                unit_score = self._unit_match(q_unit, meta.get("unit", ""))
+                if not unit_score:
+                    continue
+            if q_title and _loose_key(meta.get("job_title", "")) != q_title:
+                continue
+            dept_score = 2
+            if q_dept:
+                jd_dept = _loose_key(meta.get("department", ""))
+                if not self._department_match(q_dept, jd_dept):
+                    continue
+                dept_score = 2 if q_dept == jd_dept else 1
+            grade_score = 1 if (q_grade is not None and q_grade == self._grade_number(meta.get("job_grade"))) else 0
+            rank = (unit_score, dept_score, grade_score)
+            if best_rank is None or rank > best_rank:
+                best, best_rank = doc, rank
+        return best
+
+    def _unit_match(self, query_unit: str, jd_unit: str) -> int:
+        """
+        2 = the same unit.
+        1 = the same unit written differently: one name is the other plus
+            trailing words, e.g. 'Mobile Banking' vs 'Mobile Banking Business'.
+        0 = a different unit. Whole-WORD prefix only, so 'Merchant Management'
+            never matches 'POS Merchant Management' or 'Mobile Money Merchant
+            Management', and a unit never inherits its Reconciliation sub-unit.
+        """
+        a, b = _loose_key(query_unit), _loose_key(jd_unit)
+        if not a or not b:
+            return 0
+        if a == b:
+            return 2
+        aw, bw = a.split(), b.split()
+        short, long_ = (aw, bw) if len(aw) <= len(bw) else (bw, aw)
+        if long_[:len(short)] != short:
+            return 0
+        if ("reconciliation" in aw) != ("reconciliation" in bw):
+            return 0
+        return 1
+
+    @staticmethod
+    def _grade_number(value) -> Optional[int]:
+        """'9' / '9.0' / 'JG-13' -> 9 / 9 / 13 ; empty or 'None' -> None."""
+        m = re.search(r"\d+", str(value or ""))
+        return int(m.group()) if m else None
 
     def _department_match(self, query_dept: str, jd_dept: str) -> bool:
         if not query_dept or not jd_dept:           return False

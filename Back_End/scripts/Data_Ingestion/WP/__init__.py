@@ -7,13 +7,14 @@ dispatch table imports.
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .config import DEPARTMENT_ALIASES, QUARTER_LABELS, QUARTER_NUMBERS
+from .config import DEPARTMENT_ALIASES, QUARTER_LABELS, QUARTER_NUMBERS, UNIT_DEPARTMENT_MAP
 from .work_plan_loader import WorkPlanLoader
 
 _LOADER_CONFIG = {
     "QUARTER_LABELS": QUARTER_LABELS,
     "QUARTER_NUMBERS": QUARTER_NUMBERS,
     "DEPARTMENT_ALIASES": DEPARTMENT_ALIASES,
+    "UNIT_DEPARTMENT_MAP": UNIT_DEPARTMENT_MAP,
 }
 
 

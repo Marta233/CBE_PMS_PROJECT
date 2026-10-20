@@ -30,9 +30,7 @@ time_frame, or appraisal_logic in this step. Those are set in Step 2.
    there unless TOR specifies monthly, but never write it into the
    objective sentence itself.
 
-6. Outcome level only — never lead with a tool/system/project name
-   (e.g. not "implement a monitoring tool"; instead "Improve Customer
-   Satisfaction").
+6. Outcome level only — never lead with a tool/system/project name.
 
 
 7. No duplicate or overlapping drafts — including different wording
