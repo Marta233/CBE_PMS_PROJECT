@@ -93,14 +93,30 @@ def _run_pipeline(doc_type: str, file_path: Path) -> list:
     raise ValueError(f"Unknown doc_type: {doc_type}")
 
 
+def _replace_index(staging: Path, live: Path) -> None:
+    """Swap a finished staging index into place. The live index is removed only after the swap."""
+    backup = live.with_name(live.name + ".bak")
+    if backup.exists():
+        shutil.rmtree(backup)
+    if live.exists():
+        live.rename(backup)
+    try:
+        staging.rename(live)
+    except Exception:
+        if backup.exists() and not live.exists():
+            backup.rename(live)
+        raise
+    if backup.exists():
+        shutil.rmtree(backup, ignore_errors=True)
+
+
 # ── BSC FAISS rebuild ─────────────────────────────────────────────────────────
 def _rebuild_bsc_faiss(merged_kb: list) -> tuple[bool, str]:
     """
-    Delete existing BSC FAISS index and rebuild it from all BSC docs
-    currently in the knowledge base.
+    Rebuild the BSC FAISS index in a staging directory and swap it in only
+    after save succeeds. A failed rebuild leaves the live index untouched.
     Returns (success: bool, message: str).
     """
-    import shutil
     try:
         from langchain_core.documents import Document
         from embedding.embedder import PMSVectorStore  # type: ignore
@@ -116,16 +132,23 @@ def _rebuild_bsc_faiss(merged_kb: list) -> tuple[bool, str]:
     if not bsc_lc:
         return False, "No BSC documents found in knowledge base — FAISS not built"
 
-    if FAISS_INDEX_PATH.exists():
-        shutil.rmtree(FAISS_INDEX_PATH, ignore_errors=True)
-        logger.info(f"🗑  Removed old FAISS index at {FAISS_INDEX_PATH}")
-
+    staging = FAISS_INDEX_PATH.with_name(FAISS_INDEX_PATH.name + ".staging")
+    if staging.exists():
+        shutil.rmtree(staging)
     FAISS_INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    store = PMSVectorStore(embedding_model=EMBEDDING_MODEL, index_path=FAISS_INDEX_PATH)
-    store.create_vectorstore(bsc_lc)
-    store.save_vectorstore()
 
-    n = store.vectorstore.index.ntotal
+    store = PMSVectorStore(embedding_model=EMBEDDING_MODEL, index_path=staging)
+    try:
+        store.create_vectorstore(bsc_lc)
+        store.save_vectorstore()
+        n = store.vectorstore.index.ntotal
+        del store
+        gc.collect()
+        _replace_index(staging, FAISS_INDEX_PATH)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
     msg = f"FAISS rebuilt with {n} BSC vectors from {len(bsc_lc)} chunks"
     logger.info(f"✅ {msg}")
     return True, msg
@@ -139,6 +162,49 @@ class IngestResult(BaseModel):
     status:              str
     detail:              str  = ""
     vectorstore_updated: bool = False
+
+
+def dedup_key(doc: dict) -> tuple:
+    """Identity used when a re-upload replaces older knowledge-base chunks.
+
+    BSC, JD, and LOS replace by (source, division).
+    Work plans replace by (source, department, fiscal year, unit).
+    """
+    meta = doc.get("metadata", {})
+    source = meta.get("source")
+    if source == "WorkPlan":
+        return (source, meta.get("department"), meta.get("fiscal_year"), meta.get("unit"))
+    return (source, meta.get("division"))
+
+
+def merge_knowledge_base(existing: list, new_docs: list) -> tuple[list, int]:
+    """Drop chunks the upload replaces, then append the new documents.
+
+    A work plan stored with a blank department can never match a query, and its
+    key differs from the corrected plan. Re-uploading the same fiscal year and
+    unit replaces that stale chunk too.
+    """
+    new_keys = {dedup_key(doc) for doc in new_docs if isinstance(doc, dict)}
+    new_wp_slots = {
+        (doc["metadata"].get("fiscal_year"), doc["metadata"].get("unit"))
+        for doc in new_docs
+        if isinstance(doc, dict) and doc.get("metadata", {}).get("source") == "WorkPlan"
+    }
+
+    def _is_stale_blank_wp(doc: dict) -> bool:
+        meta = doc.get("metadata", {})
+        return (
+            meta.get("source") == "WorkPlan"
+            and not str(meta.get("department") or "").strip()
+            and (meta.get("fiscal_year"), meta.get("unit")) in new_wp_slots
+        )
+
+    filtered = [
+        doc for doc in existing
+        if dedup_key(doc) not in new_keys and not _is_stale_blank_wp(doc)
+    ]
+    removed = len(existing) - len(filtered)
+    return filtered + new_docs, removed
 
 
 # ── Endpoint ──────────────────────────────────────────────────────────────────
@@ -198,47 +264,11 @@ async def ingest_file(
                        f"Refusing to overwrite it. Fix or restore the file, then retry.",
             )
 
-    # ── 5. Deduplicate: remove old chunks for the same identity key ───────────
-    # BSC/JD/LOS identify by (source, division).
-    # Work Plan identifies by (department, fiscal_year, unit): re-uploading a
-    # plan REPLACES only the units it contains for that department + FY, and
-    # new departments / units / fiscal years are simply ADDED.
-    def _dedup_key(doc: dict) -> tuple:
-        meta = doc.get("metadata", {})
-        source = meta.get("source")
-        if source == "WorkPlan":
-            return (source, meta.get("department"), meta.get("fiscal_year"), meta.get("unit"))
-        return (source, meta.get("division"))
-
-    new_keys = {_dedup_key(doc) for doc in new_docs if isinstance(doc, dict)}
-
-    # A Work Plan stored with a BLANK department (by an older loader) can never match a
-    # query, and its key differs from the corrected plan's — so a re-upload would leave
-    # it behind as a duplicate. Re-uploading the same fiscal year + unit replaces it too.
-    new_wp_slots = {
-        (doc["metadata"].get("fiscal_year"), doc["metadata"].get("unit"))
-        for doc in new_docs
-        if isinstance(doc, dict) and doc.get("metadata", {}).get("source") == "WorkPlan"
-    }
-
-    def _is_stale_blank_wp(doc: dict) -> bool:
-        meta = doc.get("metadata", {})
-        return (
-            meta.get("source") == "WorkPlan"
-            and not str(meta.get("department") or "").strip()
-            and (meta.get("fiscal_year"), meta.get("unit")) in new_wp_slots
-        )
-
-    filtered = [
-        doc for doc in existing
-        if _dedup_key(doc) not in new_keys and not _is_stale_blank_wp(doc)
-    ]
-    removed = len(existing) - len(filtered)
+    # ── 5–6. Replace matching chunks, then append this upload ────────────────
+    merged, removed = merge_knowledge_base(existing, new_docs)
     if removed:
-        logger.info(f"♻️  Removed {removed} old chunks for keys: {new_keys}")
-
-    # ── 6. Merge and save knowledge base ──────────────────────────────────────
-    merged = filtered + new_docs
+        replaced = {dedup_key(doc) for doc in new_docs if isinstance(doc, dict)}
+        logger.info(f"♻️  Removed {removed} old chunks for keys: {replaced}")
     try:
         tmp_path = KNOWLEDGE_BASE_FILE.with_suffix(".json.tmp")
         tmp_path.write_text(_safe_dumps(merged), encoding="utf-8")          # write fully first

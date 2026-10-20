@@ -671,6 +671,22 @@ def generate(req: GenerateRequest, response: Response):
         ) from e
 
 
+@router.post("/reload-index", tags=["generation"])
+def reload_index():
+    """Drop the in-memory retrieval index so the next generate reloads from disk.
+
+    The ingest container writes a new FAISS index into the shared data volume.
+    This process keeps the previous index until reload (or a restart).
+    """
+    global _extractor
+    _extractor = None
+    logger.info("In-memory retrieval index cleared")
+    return {
+        "status": "ok",
+        "detail": "In-memory retrieval index cleared. The next generate request reloads from disk.",
+    }
+
+
 @router.get("/jobs/{job_id}", response_model=JobStatusResponse, tags=["generation"])
 def get_generation_job(job_id: str):
     job = get_job(job_id)

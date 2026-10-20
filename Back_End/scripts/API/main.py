@@ -47,17 +47,44 @@ log = logging.getLogger("pms")
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import ingest, generate, status
+# all  — local launcher (python run_app.py): ingest and generation in one process
+# api  — daily container: generation, jobs, status. No ingest.
+# ingest — quarterly upload container: ingest only.
+_APP_ROLE = os.getenv("PMS_APP_ROLE", "all").strip().lower() or "all"
+if _APP_ROLE not in {"all", "api", "ingest"}:
+    raise RuntimeError(
+        f"PMS_APP_ROLE must be all, api, or ingest (got {_APP_ROLE!r})"
+    )
+
+_ROLE_DESCRIPTION = {
+    "all": (
+        "- `/api/ingest` — Upload BSC, JD, LOS, or work-plan files\n"
+        "- `/api/generate` — Generate SMART objectives for an employee\n"
+        "- `/api/jobs/{job_id}` — Poll a generation job\n"
+        "- `/api/reload-index` — Drop the cached retrieval index\n"
+        "- `/api/status` — Check document counts and index state\n"
+        "- `/api/health` — Liveness probe\n"
+    ),
+    "api": (
+        "- `/api/generate` — Generate SMART objectives for an employee\n"
+        "- `/api/jobs/{job_id}` — Poll a generation job\n"
+        "- `/api/reload-index` — Drop the cached retrieval index\n"
+        "- `/api/status` — Check document counts and index state\n"
+        "- `/api/health` — Liveness probe\n"
+    ),
+    "ingest": (
+        "- `/api/ingest` — Upload BSC, JD, LOS, or work-plan files\n"
+        "- `/api/health` — Liveness probe\n"
+    ),
+}
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title       = "CBE PMS API",
     description = (
         "**Commercial Bank of Ethiopia — Performance Management System**\n\n"
-        "- `/api/ingest` — Upload BSC, JD, or LOS files to build the knowledge base\n"
-        "- `/api/generate` — Generate SMART objectives for an employee\n"
-        "- `/api/status` — Check document counts and index state\n"
-        "- `/api/health` — Liveness probe\n"
+        f"Role: `{_APP_ROLE}`\n\n"
+        + _ROLE_DESCRIPTION[_APP_ROLE]
     ),
     version="2.0.0",
 )
@@ -69,18 +96,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(ingest.router,   prefix="/api")
-app.include_router(generate.router, prefix="/api")
-app.include_router(status.router,   prefix="/api")
+if _APP_ROLE in {"all", "ingest"}:
+    from .routers import ingest
+
+    app.include_router(ingest.router, prefix="/api")
+
+if _APP_ROLE in {"all", "api"}:
+    from .routers import generate, status
+
+    app.include_router(generate.router, prefix="/api")
+    app.include_router(status.router, prefix="/api")
+
+
+if _APP_ROLE == "ingest":
+    @app.get("/api/health", tags=["health"])
+    def health():
+        return {"status": "ok", "role": "ingest"}
 
 
 @app.get("/", tags=["root"])
 def root():
-    return {
-        "message":  "CBE PMS API running.",
-        "docs":     "http://localhost:8000/docs",
-        "ingest":   "POST /api/ingest",
-        "generate": "POST /api/generate",
-        "status":   "GET  /api/status",
-        "health":   "GET  /api/health",
+    payload = {
+        "message": "CBE PMS API running.",
+        "role":    _APP_ROLE,
+        "docs":    "http://localhost:8000/docs",
+        "health":  "GET  /api/health",
     }
+    if _APP_ROLE in {"all", "ingest"}:
+        payload["ingest"] = "POST /api/ingest"
+    if _APP_ROLE in {"all", "api"}:
+        payload["generate"] = "POST /api/generate"
+        payload["reload_index"] = "POST /api/reload-index"
+        payload["status"] = "GET  /api/status"
+    return payload

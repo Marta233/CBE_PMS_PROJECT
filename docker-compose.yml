@@ -1,0 +1,97 @@
+x-backend-env: &backend-env
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  PMS_LLM_BACKEND: ${PMS_LLM_BACKEND:-ollama}
+  PMS_OLLAMA_MODEL: ${PMS_OLLAMA_MODEL:-llama3}
+  OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+  PMS_VLLM_BASE_URL: ${PMS_VLLM_BASE_URL:-http://host.docker.internal:8001/v1}
+  HF_HOME: /cache/huggingface
+  PYTHONUNBUFFERED: "1"
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: docker/backend.Dockerfile
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: *backend-build
+    image: cbe-pms-backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      PMS_APP_ROLE: api
+    volumes:
+      - pms-data:/app/Back_End/Data
+      - hf-cache:/cache/huggingface
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  ingest:
+    build: *backend-build
+    image: cbe-pms-backend
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      PMS_APP_ROLE: ingest
+    volumes:
+      - pms-data:/app/Back_End/Data
+      - hf-cache:/cache/huggingface
+    mem_limit: 6g
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    build: *backend-build
+    image: cbe-pms-backend
+    restart: unless-stopped
+    command: ["python", "scripts/run_worker.py"]
+    environment:
+      <<: *backend-env
+    volumes:
+      - pms-data:/app/Back_End/Data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 2g
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  pms-data:
+  hf-cache:

@@ -1,12 +1,35 @@
-python-docx
-langchain-community
-ollama
-python-dotenv
+# HTTP API
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+# Async generation
+celery
+redis
+
+# Documents
+pandas
+numpy
 openpyxl
+xlrd
+python-docx
+pypdf
+
+# Retrieval
 faiss-cpu
 sentence-transformers
 langchain
+langchain-core
+langchain-community
 langchain-huggingface
-sentence-transformers
-faiss-cpu
-uvicorn 
+nltk
+
+# LLM clients
+ollama
+httpx
+
+python-dotenv
+
+# Tests
+pytest

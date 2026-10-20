@@ -1,0 +1,13 @@
+.git
+**/.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/venv
+**/node_modules
+frontend/dist
+Back_End/Data
+Back_End/tests/output
+*.md
+Digital_Operationalize_Document.docx
