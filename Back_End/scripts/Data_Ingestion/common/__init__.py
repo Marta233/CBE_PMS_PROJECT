@@ -1,3 +1,3 @@
-"""Shared organisation registry + document schema for all ingestion packages.
-Import the modules directly:  from Data_Ingestion.common import registry, schema
+"""Shared organisation registry, document schema and ingestion helpers.
+Import the modules directly: from Data_Ingestion.common import registry, schema, finalize
 """

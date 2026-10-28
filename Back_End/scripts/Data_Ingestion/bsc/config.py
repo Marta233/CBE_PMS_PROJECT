@@ -1,4 +1,9 @@
-"""Configuration settings for BSC processing"""
+"""Configuration settings for BSC processing.
+
+There is NO list of divisions or sheet names here. Every sheet of the workbook is one division;
+the division is read from the sheet name through the organisation registry
+(common/org_registry.json), so a new division needs a registry entry, not a code change.
+"""
 
 from pathlib import Path
 
@@ -8,19 +13,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # ----------------------------
-# FILE PATHS
+# FILE PATHS (only used by the batch CLI, bsc_main.py)
 # ----------------------------
 DATA_PATH = PROJECT_ROOT / "Data" / "raw" / "Bsc_of_DB_and_RBB_divisions.xlsx"
 OUTPUT_PATH = PROJECT_ROOT / "Data" / "processed"
 
 # ----------------------------
-# SHEETS
-# ----------------------------
-RBB_SHEET = " RBB 2025.2026"
-DIGITAL_SHEET = "Digital 2025.2026"
-
-# ----------------------------
-# COLUMN CONFIG
+# COLUMN CONFIG (the BSC template: same columns on every division's sheet)
 # ----------------------------
 COL_CONFIG = {
     'strategic_obj_col': 0,

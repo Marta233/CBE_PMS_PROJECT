@@ -1,5 +1,5 @@
 {
-  "_readme": "Single source of truth for the CBE organisation tree. Edit this file, not code, to onboard a division/department/unit or to add a spelling. 'confirmed': false means the entry was inferred from existing documents and needs review by the business owner.",
+  "_readme": "Single source of truth for the CBE organisation tree. Edit this file, not code, to onboard a division/department/unit or to add a spelling. 'confirmed': false means the entry was inferred from existing documents and needs review by the business owner. Updated from the Digital Banking JD (PDF) and RBB JD (Word): every department and unit that appears in those files is confirmed. Entries still marked false are not in the JDs (Mesob comes from the Merchant and Agent work plan; Digital Service Development has no unit yet).",
   "divisions": [
     {
       "name": "Digital Banking",
@@ -79,7 +79,7 @@
             "Card",
             "Director Card Banking"
           ],
-          "confirmed": false,
+          "confirmed": true,
           "units": [
             {
               "name": "ATM Operations Support",
@@ -140,7 +140,7 @@
         {
           "name": "Mobile Money",
           "aliases": [],
-          "confirmed": false,
+          "confirmed": true,
           "units": [
             {
               "name": "Mobile Money Business",
@@ -152,12 +152,12 @@
         {
           "name": "Internal Control",
           "aliases": [],
-          "confirmed": false,
+          "confirmed": true,
           "units": [
             {
               "name": "Internal Control",
               "aliases": [],
-              "confirmed": false
+              "confirmed": true
             }
           ]
         },
@@ -179,8 +179,21 @@
         "Retail and Branch Banking",
         "Retail Banking Business"
       ],
-      "confirmed": false,
-      "departments": []
+      "confirmed": true,
+      "departments": [
+        {
+          "name": "District",
+          "aliases": [],
+          "confirmed": true,
+          "units": [
+            {
+              "name": "Branch",
+              "aliases": [],
+              "confirmed": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

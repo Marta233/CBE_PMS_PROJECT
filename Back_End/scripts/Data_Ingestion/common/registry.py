@@ -175,8 +175,10 @@ def resolve(division="", department="", unit="", trust_unit=False, infer_departm
     because a unit name is more specific than a department label that was
     mis-inferred by a loader.
 
-    infer_department=False: a blank department is left blank. Job descriptions
-    pass this so a unit name is never used to invent a department.
+    infer_department=False: a blank department STAYS blank (never derived from
+    the unit). Use it for sources whose departments must come from the file
+    itself (JD). Work Plans keep the default, because their department is
+    legitimately derived from the unit (e.g. Mobile Banking -> Mobile & Internet Banking).
     """
     r = Resolution()
     division, department, unit = (str(x or "").strip() for x in (division, department, unit))
@@ -226,7 +228,7 @@ def resolve(division="", department="", unit="", trust_unit=False, infer_departm
                 r.unit = canon_unit(unit, r.department, r.division) or ""
         if not r.unit:
             r.problems.append(f"unit '{unit}' does not belong to department '{r.department}'")
-    elif unit and not r.department and not r.problems:
+    elif unit and not r.department and not r.problems and infer_department:
         r.problems.append(f"cannot place unit '{unit}' in any department")
 
     # unconfirmed (informational)
@@ -254,3 +256,92 @@ def list_tree() -> list:
             {"department": d["name"], "units": [u["name"] for u in d.get("units", [])]}
             for d in div.get("departments", [])]})
     return out
+
+
+
+# ---------------------------------------------------------------- text search
+def _contains_words(haystack: str, needle: str) -> bool:
+    """Whole-word containment on already loose-keyed strings."""
+    return bool(needle) and f" {needle} " in f" {haystack} "
+
+
+def _best(cands: list) -> Optional[str]:
+    """cands = [(matched_key_length, canonical_name)] -> longest match if unambiguous."""
+    if not cands:
+        return None
+    cands.sort(key=lambda c: -c[0])
+    top = {c[1] for c in cands if c[0] == cands[0][0]}
+    return top.pop() if len(top) == 1 else None
+
+
+def find_division(text) -> Optional[str]:
+    """Division named inside free text, e.g. sheet ' RBB 2025.2026' -> 'RBB'."""
+    h = loose_key(text)
+    cands = []
+    for div in _load()["raw"]["divisions"]:
+        for k in [div["name"], *div.get("aliases", [])]:
+            lk = loose_key(k)
+            if _contains_words(h, lk):
+                cands.append((len(lk), div["name"]))
+    return _best(cands)
+
+
+def find_department(text, division=None) -> Optional[str]:
+    """Department named inside free text (whole words, longest match wins)."""
+    h = loose_key(text)
+    dn = canon_division(division) if division else None
+    cands = []
+    for div in _load()["raw"]["divisions"]:
+        if dn and div["name"] != dn:
+            continue
+        for dept in div.get("departments", []):
+            for k in [dept["name"], *dept.get("aliases", [])]:
+                lk = loose_key(k)
+                if _contains_words(h, lk):
+                    cands.append((len(lk), dept["name"]))
+    return _best(cands)
+
+
+def find_unit(text, department, division=None) -> Optional[str]:
+    """Unit of `department` named inside free text."""
+    h = loose_key(text)
+    hits = _load()["dept"].get(loose_key(department), [])
+    if division:
+        dn = canon_division(division)
+        hits = [x for x in hits if x[0]["name"] == dn]
+    if len(hits) != 1:
+        return None
+    cands = []
+    for u in hits[0][1].get("units", []):
+        for k in [u["name"], *u.get("aliases", [])]:
+            lk = loose_key(k)
+            if _contains_words(h, lk):
+                cands.append((len(lk), u["name"]))
+    return _best(cands)
+
+
+def find_unit_anywhere(text, division=None) -> Optional[tuple]:
+    """
+    (division, department, unit) of the unit whose name/alias appears as whole words in free
+    text, when exactly one unit matches best. Loaders use it to fill a blank department from the
+    unit the document names - it replaces the hard-coded keyword tables the loaders used to carry.
+    """
+    h = loose_key(text)
+    if not h:
+        return None
+    dn = canon_division(division) if division else None
+    cands = []
+    for div in _load()["raw"]["divisions"]:
+        if dn and div["name"] != dn:
+            continue
+        for dept in div.get("departments", []):
+            for u in dept.get("units", []):
+                for k in [u["name"], *u.get("aliases", [])]:
+                    lk = loose_key(k)
+                    if _contains_words(h, lk):
+                        cands.append((len(lk), (div["name"], dept["name"], u["name"])))
+    if not cands:
+        return None
+    cands.sort(key=lambda c: -c[0])
+    top = {c[1] for c in cands if c[0] == cands[0][0]}
+    return top.pop() if len(top) == 1 else None

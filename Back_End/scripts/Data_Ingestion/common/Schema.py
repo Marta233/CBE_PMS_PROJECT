@@ -66,7 +66,7 @@ def infer_scope_level(doc: dict) -> str:
 
 # Fields that are expected but whose absence only WARNS (the document is kept,
 # and the blank is never guessed). JD files sometimes carry no department.
-SOFT_REQUIRED = {"JD": {"department"}}
+SOFT_REQUIRED = {"JD": {"department", "unit"}}
 
 # Sources whose blank department must never be inferred from the unit.
 NO_DEPARTMENT_INFERENCE = {"JD"}

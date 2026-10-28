@@ -1,84 +1,125 @@
 # bsc_loader.py
-"""BSC Data Loader Module"""
-import pandas as pd
-import numpy as np
+"""
+BSC Data Loader - ONE loader for every division.
+
+A BSC workbook may hold several divisions (one sheet each) or just one. The division of a sheet is
+found through the organisation registry (e.g. " RBB 2025.2026" -> RBB, "Digital 2025.2026" ->
+Digital Banking). All sheets are read with the same rules, so a new division is onboarded by
+adding it to common/org_registry.json - no new loader, no code change.
+
+If the workbook also holds older years (e.g. 'RBB 2024.2025'), only the latest year per division
+is read. Rules for a sheet (the same for all divisions):
+  * the Strategic Objective cell may be merged: it carries down to the rows below it
+  * a row needs a KPI to count; the "Major - KPI" sub-header row is skipped
+  * reading stops at a row whose Strategic Objective contains TOTAL
+"""
+import logging
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
-import logging
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+from typing import Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+
+try:                                    # package import (API) or flat import (scripts)
+    from common import registry
+except ImportError:                     # pragma: no cover
+    from ..common import registry       # type: ignore
+
 logger = logging.getLogger(__name__)
+
+
 class BSCLoader:
-    """Load and process BSC data from Excel"""
-    
+    """Load and process BSC data from an Excel workbook (any number of divisions)."""
+
     def __init__(self, file_path: Path, config: Dict = None):
-        """
-        Initialize BSC Loader
-        
-        Args:
-            file_path: Path to Excel file
-            config: Configuration dictionary with column mappings
-        """
         self.file_path = Path(file_path)
         self.config = config or {}
-        self.rbb_raw = None
-        self.digital_raw = None
-        self.rbb_clean = None
-        self.digital_clean = None
-        self.combined_data = None
-        
-    def load_separately(
-    self,
-    rbb_sheet: str,
-    digital_sheet: str
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Load RBB and Digital sheets separately
+        self.raw_sheets: Dict[str, pd.DataFrame] = {}
+        self.clean_sheets: Dict[str, pd.DataFrame] = {}
+        self.sheet_divisions: Dict[str, str] = {}
+        self.skipped_sheets: List[str] = []
+        self.combined_data: Optional[pd.DataFrame] = None
 
-        Args:
-            rbb_sheet: Name of RBB sheet
-            digital_sheet: Name of Digital sheet
-
-        Returns:
-            Tuple of (rbb_raw, digital_raw)
-        """
-
+    # ------------------------------------------------------------------ load
+    def load_all_sheets(self) -> Dict[str, pd.DataFrame]:
         logger.info(f"\n📂 Loading file: {self.file_path.name}")
+        with pd.ExcelFile(self.file_path) as excel_file:          # closes the workbook
+            for sheet_name in excel_file.sheet_names:
+                self.raw_sheets[sheet_name] = pd.read_excel(excel_file, sheet_name=sheet_name, header=None)
+                logger.info(f"  ✓ Loaded '{sheet_name}': {len(self.raw_sheets[sheet_name])} rows")
+        return self.raw_sheets
 
-        try:
+    @staticmethod
+    def _sheet_year(name: str) -> int:
+        """Start year in a sheet name: ' RBB 2025.2026' -> 2025, 'Digital 2024/25' -> 2024.
+        -1 when the name carries no year."""
+        m = re.search(r"(20\d{2})\s*[./\-_]\s*(?:20)?\d{2}", name)
+        return int(m.group(1)) if m else -1
 
-            # IMPORTANT: automatically closes workbook
-            with pd.ExcelFile(self.file_path) as excel_file:
+    @staticmethod
+    def _header_row(df: pd.DataFrame) -> Optional[int]:
+        """Row of the table header ('Strategic Objectives' in the first column), if there is one."""
+        for r in range(min(len(df), 30)):
+            first = df.iat[r, 0] if df.shape[1] else None
+            if isinstance(first, str) and "strategic" in first.lower():
+                return r
+        return None
 
-                self.rbb_raw = pd.read_excel(
-                    excel_file,
-                    sheet_name=rbb_sheet,
-                    header=None
-                )
+    def _division_of_sheet(self, sheet_name: str) -> str:
+        """
+        Division of one sheet, taken from the CONTENT first, so a sheet called "Sheet1" or
+        "2025.2026" works:
+          1. the title lines above the table header ("Digital Banking Division")
+          2. the sheet name
+          3. the file name
+        '' when none of them names a known division (the upload form may then supply it).
+        KPI rows are never used as a hint: they can mention another division's words.
+        """
+        df = self.raw_sheets[sheet_name]
+        header = self._header_row(df)
+        for r in range(header if header is not None else min(len(df), 8)):
+            for v in df.iloc[r]:
+                if isinstance(v, str):
+                    found = registry.find_division(v)
+                    if found:
+                        return found
+        return registry.find_division(sheet_name) or registry.find_division(self.file_path.stem) or ""
 
-                logger.info(
-                    f"  ✓ Loaded {rbb_sheet}: {len(self.rbb_raw)} rows"
-                )
+    def _assign_divisions(self) -> None:
+        """
+        Pick the sheets to read and give each its division. Works for a workbook that holds
+        several divisions (one sheet each) AND for a workbook of a single division whose sheets
+        are named only by year, or not named at all.
 
-                self.digital_raw = pd.read_excel(
-                    excel_file,
-                    sheet_name=digital_sheet,
-                    header=None
-                )
+        * Division of a sheet: the title lines above the table (content), then sheet name, then file name.
+        * A workbook usually keeps older years next to the current one. For each division the
+          sheet with the LATEST year in its name is read; the others are ignored.
+        * Sheets that name no division (notes, summaries) are ignored when at least one sheet
+          does. If NO sheet names a division, the latest-year sheet is read with a blank
+          division: the upload form supplies it, otherwise the document is rejected with a
+          clear message ("division is required").
+        """
+        found = {name: self._division_of_sheet(name) for name in self.raw_sheets}
+        groups: Dict[str, List[str]] = {}
+        for name, div in found.items():
+            groups.setdefault(div, []).append(name)
+        if any(groups):                                  # at least one named division
+            groups = {d: n for d, n in groups.items() if d}
+        chosen = {}
+        for div, names in groups.items():
+            chosen[max(names, key=lambda n: self._sheet_year(n))] = div      # first of equals wins
+        self.sheet_divisions = {n: chosen[n] for n in self.raw_sheets if n in chosen}
+        self.skipped_sheets = [n for n in self.raw_sheets if n not in chosen]
+        for n in self.skipped_sheets:
+            why = "older year or duplicate of a sheet already read" if found.get(n) in groups else "names no known division"
+            logger.warning(f"  ⚠️ Sheet '{n}' ignored ({why})")
+        if "" in chosen.values():
+            logger.warning("  ⚠️ No sheet names a division - division left blank (the upload form can supply it)")
 
-                logger.info(
-                    f"  ✓ Loaded {digital_sheet}: {len(self.digital_raw)} rows"
-                )
-
-        except Exception as e:
-
-            logger.error(
-                f"❌ Error loading workbook: {e}"
-            )
-
-        return self.rbb_raw, self.digital_raw
-    def _clean_numeric(self, value) -> Optional[float]:
-        """Clean and convert numeric values"""
+    # ----------------------------------------------------------------- clean
+    @staticmethod
+    def _clean_numeric(value) -> Optional[float]:
         if pd.isna(value):
             return None
         if isinstance(value, (int, float)):
@@ -87,161 +128,75 @@ class BSCLoader:
             cleaned = re.sub(r'[^0-9.]', '', value.strip())
             try:
                 return float(cleaned) if cleaned else None
-            except:
+            except ValueError:
                 return None
         return None
-    
-    def clean_rbb(self, start_row: int = 1) -> pd.DataFrame:
-        """
-        Clean and extract RBB data
-        
-        Args:
-            start_row: Row index where data starts
-            
-        Returns:
-            Cleaned RBB dataframe
-        """
-        if self.rbb_raw is None:
-            logger.error("❌ RBB data not loaded yet")
-            return pd.DataFrame()
-        
-        logger.info("\n📋 Cleaning RBB data...")
-        data_rows = []
-        
-        col_strategic = self.config.get('strategic_obj_col', 0)
-        col_kpi = self.config.get('kpi_col', 1)
-        col_measurement = self.config.get('measurement_col', 2)
-        col_weight = self.config.get('weight_col', 3)
-        col_plan = self.config.get('plan_col', 9)
-        
-        consecutive_empty = 0   # track consecutive empty strategic-obj rows
-        for idx in range(start_row, len(self.rbb_raw)):
-            row = self.rbb_raw.iloc[idx]
-            strategic_obj = row.iloc[col_strategic] if len(row) > col_strategic else None
-            
-            if pd.isna(strategic_obj) or str(strategic_obj).strip() == '':
-                consecutive_empty += 1
-                # Stop only after 5 consecutive empty rows (not a fixed row index)
-                if consecutive_empty >= 5:
+
+    @staticmethod
+    def _text(row, col) -> str:
+        if len(row) <= col:
+            return ""
+        v = row.iloc[col]
+        return "" if pd.isna(v) else str(v).strip()
+
+    def clean_sheet(self, sheet_name: str, start_row: int = 1) -> pd.DataFrame:
+        raw = self.raw_sheets[sheet_name]
+        division = self.sheet_divisions.get(sheet_name, "")
+        c = self.config
+        col_so, col_kpi = c.get('strategic_obj_col', 0), c.get('kpi_col', 1)
+        col_ms, col_w, col_plan = c.get('measurement_col', 2), c.get('weight_col', 3), c.get('plan_col', 9)
+
+        header = self._header_row(raw)
+        first_row = header + 1 if header is not None else start_row      # data begins under the header
+        rows, current = [], None
+        for idx in range(first_row, len(raw)):
+            row = raw.iloc[idx]
+            strategic = self._text(row, col_so)
+            if strategic:
+                if 'TOTAL' in strategic.upper():
                     break
+                current = strategic                      # merged cell: carries down
+            kpi = self._text(row, col_kpi)
+            if not kpi or 'Major - KPI' in kpi or current is None:
                 continue
-            consecutive_empty = 0   # reset on any non-empty row
-            
-            if 'TOTAL' in str(strategic_obj).upper():
-                break
-            
-            kpi = row.iloc[col_kpi] if len(row) > col_kpi else None
-            if pd.isna(kpi) or str(kpi).strip() == '':
-                continue
-            
-            measurement = row.iloc[col_measurement] if len(row) > col_measurement else None
-            weight = row.iloc[col_weight] if len(row) > col_weight else None
             plan = row.iloc[col_plan] if len(row) > col_plan else None
-            
-            weight = self._clean_numeric(weight) or 0
-            measurement = str(measurement).strip() if pd.notna(measurement) else ''
-            
-            data_rows.append({
-                'division': 'RBB',
-                'strategic_objective': str(strategic_obj).strip(),
-                'kpi': str(kpi).strip(),
-                'measurement': measurement,
-                'weight': weight,
-                'plan': plan if pd.notna(plan) else None
+            rows.append({
+                'division': division,
+                'strategic_objective': current,
+                'kpi': kpi,
+                'measurement': self._text(row, col_ms),
+                'weight': self._clean_numeric(row.iloc[col_w] if len(row) > col_w else None) or 0,
+                'plan': plan if pd.notna(plan) else None,
             })
-        
-        self.rbb_clean = pd.DataFrame(data_rows)
-        logger.info(f"  ✅ Cleaned {len(self.rbb_clean)} RBB KPIs")
-        return self.rbb_clean
-    
-    def clean_digital(self, start_row: int = 1) -> pd.DataFrame:
-        """
-        Clean and extract Digital data (handles merged cells)
-        
-        Args:
-            start_row: Row index where data starts
-            
-        Returns:
-            Cleaned Digital dataframe
-        """
-        if self.digital_raw is None:
-            logger.error("❌ Digital data not loaded yet")
-            return pd.DataFrame()
-        
-        logger.info("\n📋 Cleaning Digital data...")
-        data_rows = []
-        current_strategic_obj = None
-        
-        col_strategic = self.config.get('strategic_obj_col', 0)
-        col_kpi = self.config.get('kpi_col', 1)
-        col_measurement = self.config.get('measurement_col', 2)
-        col_weight = self.config.get('weight_col', 3)
-        col_plan = self.config.get('plan_col', 9)
-        
-        for idx in range(start_row, len(self.digital_raw)):
-            row = self.digital_raw.iloc[idx]
-            strategic_obj = row.iloc[col_strategic] if len(row) > col_strategic else None
-            
-            if pd.notna(strategic_obj) and str(strategic_obj).strip() != '':
-                if 'TOTAL' not in str(strategic_obj).upper():
-                    current_strategic_obj = str(strategic_obj).strip()
-            
-            if current_strategic_obj and 'TOTAL' in current_strategic_obj.upper():
-                break
-            
-            kpi = row.iloc[col_kpi] if len(row) > col_kpi else None
-            if pd.isna(kpi) or str(kpi).strip() == '':
-                continue
-            
-            if 'Major - KPI' in str(kpi):
-                continue
-            
-            measurement = row.iloc[col_measurement] if len(row) > col_measurement else None
-            weight = row.iloc[col_weight] if len(row) > col_weight else None
-            plan = row.iloc[col_plan] if len(row) > col_plan else None
-            
-            weight = self._clean_numeric(weight) or 0
-            measurement = str(measurement).strip() if pd.notna(measurement) else ''
-            
-            if current_strategic_obj:
-                data_rows.append({
-                    'division': 'Digital Banking',
-                    'strategic_objective': current_strategic_obj,
-                    'kpi': str(kpi).strip(),
-                    'measurement': measurement,
-                    'weight': weight,
-                    'plan': plan if pd.notna(plan) else None
-                })
-        
-        self.digital_clean = pd.DataFrame(data_rows)
-        logger.info(f"  ✅ Cleaned {len(self.digital_clean)} Digital KPIs")
-        return self.digital_clean
+        df = pd.DataFrame(rows)
+        self.clean_sheets[sheet_name] = df
+        logger.info(f"  ✅ '{sheet_name}' ({division or 'division unknown'}): {len(df)} KPIs")
+        return df
+
+    def clean_all_sheets(self, start_row: int = 1) -> Dict[str, pd.DataFrame]:
+        if not self.raw_sheets:
+            self.load_all_sheets()
+        if not self.sheet_divisions:
+            self._assign_divisions()
+        for name in self.sheet_divisions:
+            self.clean_sheet(name, start_row)
+        return self.clean_sheets
+
     def merge_data(self) -> pd.DataFrame:
-        """Merge RBB and Digital data into one dataset"""
-        if self.rbb_clean is None:
-            self.clean_rbb()
-        if self.digital_clean is None:
-            self.clean_digital()
-        
-        logger.info("\n🔗 Merging RBB and Digital data...")
-        self.combined_data = pd.concat([self.rbb_clean, self.digital_clean], ignore_index=True)
-        logger.info(f"  ✅ Merged {len(self.combined_data)} total KPIs")
-        logger.info(f"     - RBB: {len(self.rbb_clean)}")
-        logger.info(f"     - Digital: {len(self.digital_clean)}")
-        
+        if not self.clean_sheets:
+            self.clean_all_sheets()
+        frames = [df for df in self.clean_sheets.values() if not df.empty]
+        self.combined_data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(
+            columns=['division', 'strategic_objective', 'kpi', 'measurement', 'weight', 'plan'])
+        logger.info(f"\n🔗 Merged {len(self.combined_data)} KPIs from {len(frames)} division sheet(s)")
         return self.combined_data
+
+    # ------------------------------------------------------------- documents
     def to_documents(self) -> list:
         """
-        Convert cleaned BSC data into embedding-ready documents
-        Returns list of dicts: {text, metadata}
-
-        Text is ONLY Strategic Objective + KPI. Measurement/Target/weight
-        are BSC-level (division-wide) figures, not this specific employee's
-        own numbers — showing them in the model's context risked it
-        treating a division-wide target as if it were personal to this
-        employee. They move into `metadata` instead: weight is still used
-        for grade-band scoring in extractor.py's _retrieve_bsc(), just
-        read from metadata now instead of regex-parsed out of text.
+        Text is ONLY Strategic Objective + KPI. Measurement/Target/weight are division-wide
+        figures, so they stay in `metadata` (weight is read from metadata by extractor.py's
+        _retrieve_bsc() for grade-band scoring).
         """
         if self.combined_data is None:
             self.merge_data()
@@ -251,16 +206,15 @@ class BSCLoader:
             Strategic Objective: {row['strategic_objective']}
             KPI: {row['kpi']}
             """
-            metadata = {
-                "source": "BSC",
-                "division": row["division"],
-                "kpi": row["kpi"],
-                "measurement": row["measurement"],
-                "target": row["plan"],
-                "weight": row["weight"],
-            }
             documents.append({
                 "text": text.strip(),
-                "metadata": metadata
+                "metadata": {
+                    "source": "BSC",
+                    "division": row["division"],
+                    "kpi": row["kpi"],
+                    "measurement": row["measurement"],
+                    "target": row["plan"],
+                    "weight": row["weight"],
+                },
             })
         return documents

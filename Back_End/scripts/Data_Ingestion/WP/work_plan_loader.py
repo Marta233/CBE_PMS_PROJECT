@@ -23,29 +23,54 @@ from typing import Dict, List, Optional, Tuple
 import docx
 import logging
 
+try:                                    # package import (API) or flat import (scripts)
+    from common import registry
+except ImportError:                     # pragma: no cover
+    from ..common import registry       # type: ignore
+
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 _QUARTER_ORDER = ("Q1", "Q2", "Q3", "Q4")
 
 
-def _norm_unit(raw_unit: str) -> str:
-    """Normalize free-text Unit column values into a small fixed set of keys."""
-    u = raw_unit.strip().lower()
-    if "both" in u:
-        return "Both"
-    if "mesob" in u:
-        return "Mesob"
-    if "agent" in u:
-        return "Agent"
-    if "merchant" in u:
-        return "Merchant"
-    return raw_unit.strip() or "Unspecified"
+def _plan_name(text: str) -> str:
+    """'Mobile Banking Business Work plan' -> 'Mobile Banking Business'."""
+    return re.sub(r"\s*Work\s*plan.*$", "", text or "", flags=re.IGNORECASE).strip()
 
 
-def _loose_key(text) -> str:
-    """Comparison key that ignores case and how '&' is spelled/spaced."""
-    return re.sub(r"\s+", " ", str(text or "").replace("&", " and ")).strip().lower()
+def resolve_plan_owner(name: str) -> Tuple[str, str, str, str]:
+    """
+    Who a plan belongs to, from its title: (level, division, department, unit).
+    level is 'division' | 'department' | 'unit' | 'unknown'. Exact names are tried first, so
+    'Merchant and Agent Management' is the DEPARTMENT, not the unit 'Agent Management' that
+    happens to be written inside it.
+    """
+    name = (name or "").strip()
+    if not name:
+        return "unknown", "", "", ""
+    div = registry.canon_division(name)
+    if div:
+        return "division", div, "", ""
+    dept = registry.canon_department(name)
+    if dept:
+        return "department", registry.division_of_department(dept) or "", dept, ""
+    owner = registry.department_of_unit(name)               # exact unit name or alias
+    if owner:
+        hit = registry.find_unit_anywhere(name, owner[0])
+        if hit and hit[1] == owner[1]:
+            return "unit", hit[0], hit[1], hit[2]
+    # the title wraps a name in extra words: look inside it
+    div = registry.find_division(name)
+    if div and not registry.find_department(name, div):
+        return "division", div, "", ""
+    dept = registry.find_department(name)
+    if dept:
+        return "department", registry.division_of_department(dept) or "", dept, ""
+    hit = registry.find_unit_anywhere(name)
+    if hit:
+        return "unit", hit[0], hit[1], hit[2]
+    return "unknown", "", name, ""
 
 
 def _clean_target_phrase(text: str) -> str:
@@ -71,12 +96,11 @@ class WorkPlanLoader:
         """
         self.file_path = Path(file_path)
         self.config = config or {}
-        # UNIT -> DEPARTMENT, decided per row at ingestion (see config.UNIT_DEPARTMENT_MAP)
-        self.unit_departments = {
-            _loose_key(k): v for k, v in (self.config.get("UNIT_DEPARTMENT_MAP") or {}).items()
-        }
         self.doc = None
+        self.owner_level = "unknown"       # division | department | unit | unknown (from the title)
+        self.division = ""
         self.department = None
+        self.unit = ""
         self.fiscal_year = None
         self.major_objectives: List[str] = []
         self.entries: List[dict] = []  # flat list, each tagged with unit + quarter
@@ -131,9 +155,9 @@ class WorkPlanLoader:
         Row 1: ["Division Objectives", month1, month2, month3, "Unit"]   <- Unit column is OPTIONAL
         Row 2+: [division_objective, target1, target2, target3, unit?]
 
-        Some departments (e.g. Mobile Banking) have NO Unit column (4 columns).
-        Their rows get unit = the department name, so every document still
-        carries a unit value to key on.
+        A plan may have NO Unit column (4 columns). Its rows then belong to whoever the TITLE
+        names: a unit-level plan gives every row that unit; a department or division plan
+        gives every row a blank unit (department-wide / division-wide).
         """
         quarter_labels = self.config.get("QUARTER_LABELS", ("1st Q", "2nd Q", "3rd Q", "4th Q"))
         quarter_numbers = self.config.get(
@@ -153,25 +177,40 @@ class WorkPlanLoader:
             if len(cells) < 4 or not cells[0]:
                 continue
             division_objective, m1, m2, m3 = cells[0], cells[1], cells[2], cells[3]
-            unit_raw = cells[4] if has_unit_col and len(cells) > 4 else ""
-            unit = _norm_unit(unit_raw) if unit_raw.strip() else (self.department or "Unspecified")
+            unit_raw = (cells[4] if has_unit_col and len(cells) > 4 else "").strip()
+            division, department = self._owner_of_row(unit_raw)
+            unit = self._unit_of_row(unit_raw, division, department)
             entries.append({
                 "division_objective": division_objective,
                 "quarter": quarter,
                 "months": dict(zip(months, [m1, m2, m3])),
                 "unit": unit,
-                "department": self._department_for(unit),
+                "department": department,
+                "division": division,
             })
         return entries
 
-    def _department_for(self, unit: str) -> str:
-        """
-        The department a row is filed under. The unit wins: a unit listed in
-        UNIT_DEPARTMENT_MAP (e.g. 'Mobile Banking' -> 'Mobile & Internet Banking')
-        belongs to that department whatever the docx title / file name says, or even
-        if they say nothing. Otherwise the title / file-name department is used.
-        """
-        return self.unit_departments.get(_loose_key(unit)) or self.department or ""
+    def _unit_of_row(self, unit_raw: str, division: str, department: str) -> str:
+        """The row's unit. No Unit cell: the plan's own unit (blank for a department/division
+        plan). A "Both ..." cell becomes 'Both' - finalize() later splits it into one document
+        per unit. Any other spelling is mapped to the registry's unit name so that the same
+        unit written two ways ('Agent' / 'agent') is one unit, not two."""
+        if not unit_raw:
+            return self.unit
+        key = registry.loose_key(unit_raw)
+        if key == registry.MULTI_UNIT_PREFIX or key.startswith(registry.MULTI_UNIT_PREFIX + " "):
+            return "Both"
+        return registry.canon_unit(unit_raw, department, division or None) or unit_raw
+
+    def _owner_of_row(self, unit_raw: str) -> Tuple[str, str]:
+        """(division, department) a row is filed under. A unit written in the row wins, when
+        the registry knows it ('Agent' -> Merchant and Agent Management); otherwise the
+        plan's own owner, taken from its title."""
+        if unit_raw:
+            owner = registry.department_of_unit(unit_raw)       # (division, department) or None
+            if owner:
+                return owner
+        return self.division, self.department or ""
 
     def clean(self) -> "WorkPlanLoader":
         """Parse the loaded docx into department metadata + flat unit-tagged entries."""
@@ -188,15 +227,14 @@ class WorkPlanLoader:
              and not re.match(r"work\s*plan\s+for\b", t, re.IGNORECASE)),
             "",
         )
-        self.department = re.sub(r"\s*Work\s*plan.*$", "", dept_line, flags=re.IGNORECASE).strip()
-        if not self.department:  # fallback: filename "MB_Work_Plan_-2026-27FY.docx" -> "MB"
-            self.department = re.split(
+        title_name = _plan_name(dept_line)
+        if not title_name:  # fallback: filename "MB_Work_Plan_-2026-27FY.docx" -> "MB"
+            title_name = re.split(
                 r"_?work[_\s-]*plan", self.file_path.stem, flags=re.IGNORECASE
             )[0].strip("_ -")
-        # A blank department here is no longer fatal by itself: the rows' units may still
-        # name it (UNIT_DEPARTMENT_MAP). It is only an error if some row ends up without one.
-        aliases = {k.lower(): v for k, v in self.config.get("DEPARTMENT_ALIASES", {}).items()}
-        self.department = aliases.get(self.department.lower(), self.department)
+        self.owner_level, self.division, self.department, self.unit = resolve_plan_owner(title_name)
+        if self.owner_level == "unknown":
+            logger.warning(f"  ⚠️ '{title_name}' is not in the organisation registry")
         fy_line = next((t for t in title_paragraphs if re.search(r"\d{4}/\d{2,4}", t)), "")
         fy_match = re.search(r"\d{4}/\d{2,4}", fy_line)
         self.fiscal_year = fy_match.group(0) if fy_match else ""
@@ -210,21 +248,21 @@ class WorkPlanLoader:
         for t in tables[1:]:
             self.entries.extend(self._parse_quarter_table(t))
 
-        # Every document must carry a department — a blank one can never match a query.
-        blank_units = sorted({e["unit"] for e in self.entries if not e["department"]})
-        if blank_units or (not self.department and not self.entries):
-            raise ValueError(
-                f"Could not determine the department of {self.file_path.name!r}: its title and file name "
-                f"don't name one"
-                + (f", and the unit(s) {blank_units} are not in UNIT_DEPARTMENT_MAP" if blank_units else "")
-                + ". Name the department in the title, or add the unit to UNIT_DEPARTMENT_MAP "
-                  "(Data_Ingestion/WP/config.py)."
-            )
-        if not self.department:  # label for the log only; each row keeps its own department
-            self.department = Counter(e["department"] for e in self.entries).most_common(1)[0][0]
+        # A plan must belong to someone: a division, a department or a unit. Rows that end up
+        # with no owner at all can never match a query. (A name the registry does not know is
+        # NOT an error here: it is kept as written and finalize() rejects it with a clear message.)
+        if self.owner_level != "division":
+            ownerless = [e for e in self.entries if not e["department"]]
+            if ownerless or (not self.department and not self.entries):
+                raise ValueError(
+                    f"Could not determine who {self.file_path.name!r} belongs to: its title and file "
+                    f"name name no division, department or unit. Put the department or unit in the "
+                    f"title (e.g. 'Mobile Banking Work plan') or add the name to "
+                    f"Data_Ingestion/common/org_registry.json."
+                )
 
         logger.info(f"  ✅ Cleaned {len(self.entries)} Work Plan entries "
-                    f"for {self.department} ({self.fiscal_year})")
+                    f"for {self.department or self.division} ({self.fiscal_year})")
         return self
 
     # =========================================================
@@ -232,15 +270,15 @@ class WorkPlanLoader:
     # FULL FISCAL YEAR (Q1-Q4 rolled up together)
     # =========================================================
 
-    def _group_into_yearly_objectives(self) -> Dict[Tuple[str, str, str], Dict[str, dict]]:
+    def _group_into_yearly_objectives(self) -> Dict[Tuple[str, str, str, str], Dict[str, dict]]:
         """
-        Group flat quarterly entries by (division_objective, unit, department), merging
+        Group flat quarterly entries by (division_objective, unit, department, division), merging
         all 4 quarters' monthly targets under each key — this is what turns
         4 separate quarter-scoped rows into 1 yearly objective.
         """
-        grouped: Dict[Tuple[str, str, str], Dict[str, dict]] = {}
+        grouped: Dict[Tuple[str, str, str, str], Dict[str, dict]] = {}
         for entry in self.entries:
-            key = (entry["division_objective"], entry["unit"], entry["department"])
+            key = (entry["division_objective"], entry["unit"], entry["department"], entry["division"])
             grouped.setdefault(key, {})[entry["quarter"]] = entry["months"]
         return grouped
 
@@ -265,7 +303,7 @@ class WorkPlanLoader:
         grouped = self._group_into_yearly_objectives()
 
         documents = []
-        for (division_objective, unit, department), quarters in grouped.items():
+        for (division_objective, unit, department, division), quarters in grouped.items():
             seen: set[str] = set()
             activities: List[str] = []
             for q in _QUARTER_ORDER:
@@ -289,6 +327,7 @@ class WorkPlanLoader:
             )
             metadata = {
                 "source": "WorkPlan",
+                "division": division,
                 "department": department,
                 "fiscal_year": self.fiscal_year,
                 "unit": unit,

@@ -47,7 +47,8 @@ REMOVE_DUPLICATES = True
 # METADATA SETTINGS
 # =========================================================
 
-DEFAULT_DIVISION = "Digital Banking Division"
+# No default division: it is looked up per sheet in the organisation registry
+# (common/org_registry.json), so every division works with the same loader.
 
 SOURCE_NAME = "LOS"
 

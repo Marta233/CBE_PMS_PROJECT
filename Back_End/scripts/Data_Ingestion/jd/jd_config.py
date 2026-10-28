@@ -1,5 +1,9 @@
 """
 jd_config.py  –  Central configuration for the JD ingestion pipeline.
+
+There are no division constants here: the division, department and unit are read from each
+Job Description itself, and mapped to the canonical names by the organisation registry
+(common/org_registry.json) when the document is ingested.
 """
 from pathlib import Path
 # PROJECT ROOT (ANCHOR POINT)
@@ -7,17 +11,21 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 # ----------------------------
-# FILE PATHS
+# FILE PATHS (only used by the batch CLI, jd_main.py)
 # ----------------------------
-RBB_JD_PATH = PROJECT_ROOT / "Data" / "raw" / "RBB_JD.docx"
-
-DIGITAL_JD_PATH = PROJECT_ROOT / "Data" / "raw" / "Digital Banking JD.pdf"
+RAW_DIR = PROJECT_ROOT / "Data" / "raw"
+JD_FILES = [
+    RAW_DIR / "RBB_JD.docx",
+    RAW_DIR / "Digital Banking JD.pdf",
+]
 
 OUTPUT_PATH = PROJECT_ROOT / "Data" / "processed"
 
-# ── Source labels ─────────────────────────────────────────────────────────────
-DIVISION_RBB     = "Retail & Branch Banking"
-DIVISION_DIGITAL = "Digital Banking"
+# ── Behaviour ────────────────────────────────────────────────────────────────
+# Many JDs name their unit but leave the Department cell empty. When True, the department is
+# taken from the registry: the department that owns the unit named by the JD. It is filled in
+# ONLY when the registry gives exactly one answer; otherwise the department stays blank.
+INFER_DEPARTMENT_FROM_UNIT = True
 
 # ── Section boundary keywords (lowercase) ────────────────────────────────────
 RESP_START_KEYWORDS = [
@@ -35,11 +43,11 @@ RESP_STOP_KEYWORDS = [
 
 # ── Output columns (unified schema) ──────────────────────────────────────────
 OUTPUT_COLS = [
-    "source",            # "RBB" | "Digital"
+    "source",
     "division",
-    "supervisor",        # only for Digital (from "Supervisor" field)
-    "unit",              # new field for department/unit
-    "department",        # new field for department
+    "supervisor",
+    "unit",
+    "department",
     "job_title",
     "job_grade",         # int or None
     "job_category",

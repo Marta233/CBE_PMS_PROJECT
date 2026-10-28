@@ -4,15 +4,28 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import logging
+import re
+
+try:                                    # package import (API) or flat import (scripts)
+    from common import registry
+except ImportError:                     # pragma: no cover
+    from ..common import registry       # type: ignore
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
 
 
 class LOSLoader:
-    """Load and process LOS data from Excel"""
+    """
+    Load and process LOS data from Excel - ONE loader for every division.
+
+    Each sheet of the workbook is one DEPARTMENT. The department's division is looked up in the
+    organisation registry (common/org_registry.json), so a new division or department is
+    onboarded by editing the registry, not this code. The sheet name is kept as written;
+    finalize() maps it to the canonical department name and reports the rename.
+    """
 
     def __init__(self, file_path: Path, config: Dict = None):
 
@@ -82,6 +95,23 @@ class LOSLoader:
 
         return value
 
+    # Sheet names that say nothing about the department ("Sheet1", "Data", "LOS", a year...).
+    _GENERIC_SHEET = re.compile(r"^\s*(sheet\s*\d*|data|los|objectives?|[\d./\-_\s]*)\s*$", re.IGNORECASE)
+
+    @classmethod
+    def sheet_scope(cls, sheet_name: str) -> Tuple[str, str]:
+        """(division, department) for a sheet. The division comes from the registry (the
+        division that owns the department named by the sheet). Blank division: the upload form
+        may supply it, otherwise finalize() rejects the rows with a clear message. A sheet with
+        a generic name ("Sheet1") gives a blank department, so a workbook of ONE department can
+        take it from the upload form."""
+        department = str(sheet_name).strip()
+        if cls._GENERIC_SHEET.match(department):
+            return "", ""
+        known = registry.find_department(department)
+        division = registry.division_of_department(known) if known else ""
+        return division or "", department
+
     def clean_sheet(
         self,
         sheet_name: str,
@@ -102,6 +132,7 @@ class LOSLoader:
         logger.info(f"\n📋 Cleaning sheet: {sheet_name}")
 
         raw_df = self.raw_sheets[sheet_name]
+        sheet_division, sheet_department = self.sheet_scope(sheet_name)
 
         data_rows = []
 
@@ -200,9 +231,9 @@ class LOSLoader:
 
             data_rows.append({
 
-                "division": "Digital Banking Division",
+                "division": sheet_division,
 
-                "department": sheet_name,
+                "department": sheet_department,
 
                 "perspective": current_perspective,
 
@@ -219,7 +250,9 @@ class LOSLoader:
                     cleaned_unit
             })
 
-        cleaned_df = pd.DataFrame(data_rows)
+        cleaned_df = pd.DataFrame(data_rows, columns=[
+            "division", "department", "perspective", "strategic_objective",
+            "division_objective", "department_objective", "unit_objective"])
 
         cleaned_df = cleaned_df.drop_duplicates()
 
@@ -267,14 +300,14 @@ class LOSLoader:
 
         logger.info("\n🔗 Merging LOS sheets...")
 
-        all_dataframes = list(
-            self.clean_sheets.values()
-        )
+        all_dataframes = [df for df in self.clean_sheets.values() if not df.empty]
 
         self.combined_data = pd.concat(
             all_dataframes,
             ignore_index=True
-        )
+        ) if all_dataframes else pd.DataFrame(columns=[
+            "division", "department", "perspective", "strategic_objective",
+            "division_objective", "department_objective", "unit_objective"])
 
         logger.info(
             f"  ✅ Merged {len(self.combined_data)} rows"

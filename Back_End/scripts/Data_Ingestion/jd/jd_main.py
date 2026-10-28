@@ -2,9 +2,9 @@ import pandas as pd
 import json
 from pathlib import Path
 
-from .jd_config import OUTPUT_PATH, RBB_JD_PATH, DIGITAL_JD_PATH, OUTPUT_COLS
-from .rbb_loader import RBBLoader
-from .digital_loader import DigitalLoader
+from .jd_config import OUTPUT_PATH, JD_FILES, OUTPUT_COLS
+from .jd_loader import JDLoader
+from . import _df_to_documents
 
 
 def run_pipeline() -> tuple[pd.DataFrame, list]:
@@ -12,38 +12,31 @@ def run_pipeline() -> tuple[pd.DataFrame, list]:
     print("JD DATA INGESTION PIPELINE")
     print("=" * 68)
 
-    rbb_df     = RBBLoader(RBB_JD_PATH).load()
-    digital_df = DigitalLoader(DIGITAL_JD_PATH).load()
+    frames = []
+    for path in JD_FILES:
+        if not Path(path).exists():
+            print(f"⚠️  Skipping missing file: {path}")
+            continue
+        frames.append(JDLoader(path).load())
+    if not frames:
+        print("⚠️  No JD files found")
+        return pd.DataFrame(), []
 
-    combined = pd.concat([rbb_df, digital_df], ignore_index=True)
+    combined = pd.concat(frames, ignore_index=True)
 
     # ── Dedup key: division + unit + job_title + job_grade + reports_to
-    #
-    #  Why grade?  The PDF has roles like "Banking Operation Officer" that
-    #  appear at both grade 9 and grade 10 within the same unit, with the
-    #  same reports-to.  Without grade in the key, one gets silently dropped.
-    #
-    #  Why reports_to?  Many units share the same generic titles
-    #  ("Senior Digital Banking Officer") but each team is distinct because
-    #  it reports to a different team leader.
-    #
+    #  Grade: the same title can exist at two grades in one unit.
+    #  reports_to: many units share generic titles but report to different team leaders.
     dedup_cols = [c for c in ["division", "unit", "job_title", "job_grade", "reports_to"]
                   if c in combined.columns]
-
     before = len(combined)
     combined = combined.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
-    after = len(combined)
-    print(f"\n🔁 Dedup: {before} → {after} records (removed {before - after} true duplicate(s))")
+    print(f"\n🔁 Dedup: {before} → {len(combined)} records (removed {before - len(combined)} true duplicate(s))")
 
-    # Drop internal dedup column before saving
-    out_cols = [c for c in OUTPUT_COLS if c in combined.columns]
-    combined = combined[out_cols]
-
-    print(f"\n📊 Final: {len(rbb_df)} RBB + {len(digital_df)} Digital = {len(combined)} unique JDs")
+    combined = combined[[c for c in OUTPUT_COLS if c in combined.columns]]
+    print(f"\n📊 Final: {len(combined)} unique JDs from {len(frames)} file(s)")
 
     OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
-    rbb_df.to_csv(OUTPUT_PATH / "jd_rbb.csv", index=False)
-    digital_df.to_csv(OUTPUT_PATH / "jd_digital.csv", index=False)
     combined.to_csv(OUTPUT_PATH / "jd_combined.csv", index=False)
 
     long_rows = []
@@ -65,33 +58,7 @@ def run_pipeline() -> tuple[pd.DataFrame, list]:
             })
     pd.DataFrame(long_rows).to_csv(OUTPUT_PATH / "jd_responsibilities.csv", index=False)
 
-    documents = []
-    for _, row in combined.iterrows():
-        responsibilities = row.get("responsibilities")
-        if isinstance(responsibilities, list):
-            resp_text = ", ".join(responsibilities)
-        else:
-            resp_text = str(responsibilities) if pd.notna(responsibilities) else ""
-
-        # Text is ONLY Job Objective + Responsibilities — Division/Unit/
-        # Department/Job Title/Job Grade are already in the employee's own
-        # query, so repeating them per document is redundant token cost.
-        # Those fields stay in `metadata` below, which is what
-        # QueryExtractor._match_jd_flexible() actually matches against.
-        text = (
-            f"Job Objective: {row.get('job_objective', 'N/A')}\n"
-            f"Responsibilities: {resp_text}"
-        )
-        metadata = {
-            "source":     row["source"],
-            "division":   row["division"],
-            "department": row.get("department", ""),
-            "unit":       row.get("unit", ""),
-            "job_title":  row["job_title"],
-            "job_grade":  str(row.get("job_grade", "")),
-        }
-        documents.append({"text": text.strip(), "metadata": metadata})
-
+    documents = _df_to_documents(combined)
     output_file = OUTPUT_PATH / "jd_documents.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(documents, f, indent=2, ensure_ascii=False)

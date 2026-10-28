@@ -1,5 +1,8 @@
 """
 los package — exposes run(file_path) for the API layer.
+
+One loader for every division: each Excel sheet is a department, and the registry
+(common/org_registry.json) says which division owns it.
 """
 from pathlib import Path
 from typing import List, Dict, Any
@@ -31,7 +34,7 @@ def run(file_path: Path) -> List[Dict[str, Any]]:
         docs = []
         for _, row in df.iterrows():
             text = "\n".join(f"{k.replace('_',' ').title()}: {v}" for k, v in row.items() if pd.notna(v))
-            docs.append({"text": text, "metadata": {"source": "LOS", "division": str(row.get("division","Digital Banking Division")), "department": str(row.get("department",""))}})
+            docs.append({"text": text, "metadata": {"source": "LOS", "division": str(row.get("division","") or ""), "department": str(row.get("department","") or "")}})
         return docs
 
     if ext == ".pdf":
@@ -41,7 +44,7 @@ def run(file_path: Path) -> List[Dict[str, Any]]:
         for i, page in enumerate(reader.pages, 1):
             text = (page.extract_text() or "").strip()
             if text:
-                docs.append({"text": text, "metadata": {"source": "LOS", "division": "Unknown", "department": ""}})
+                docs.append({"text": text, "metadata": {"source": "LOS", "division": "", "department": ""}})
         return docs
 
     raise ValueError(f"Unsupported LOS file type '{ext}'")
